@@ -1,0 +1,312 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "66592193-8f22-4373-aae4-576262fdf6ce",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "/home/node/videos/video.mp4",
+        "dataPropertyName": "=data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        -100
+      ],
+      "id": "0de8d215-419a-4603-9a41-8e62d7e658b8",
+      "name": "Read/Write Files from Disk"
+    },
+    {
+      "parameters": {
+        "jsCode": "const videos = $node[\"Search on Pexels\"].json.videos;\nif (!videos || videos.length === 0) {\n  throw new Error(\"No video found.\");\n}\n// Take video having low-resolution (height<=540)\nconst files = videos[0].video_files;\nconst preview = files.find(f => f.height <= 540) || files[0];\nreturn [{ json: { clipUrl: preview.link } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        -100
+      ],
+      "id": "b2957785-c0ab-4012-8431-ab74ea23a688",
+      "name": "Parse Pexels Response"
+    },
+    {
+      "parameters": {
+        "url": "https://api.pexels.com/videos/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "“science+fact”"
+            },
+            {
+              "name": "per_page",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        -100
+      ],
+      "id": "42d53ef9-d5a2-4f99-bf65-b71ec1579ff9",
+      "name": "Search on Pexels",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "upsxzSuObJpSwJxt",
+          "name": "Pexels Authorization"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $node[\"Parse Pexels Response\"].json[\"clipUrl\"] }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        -100
+      ],
+      "id": "977f0257-9819-4d86-bc37-120afb0a7556",
+      "name": "Download Video"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c8479495-d0ac-42d2-9d8e-2063f82c1146",
+              "name": "Topic",
+              "value": "Fun Fact about Football (Soccer)",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "id": "e6b65930-a8c7-4ee4-99f8-9f2d1940dc7c",
+      "name": "Variables"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"meta-llama/llama-4-maverick:free\",\n  \"messages\": [\n    { \"role\": \"system\", \"content\": \"You are a voice-over script writer for a 15-second fun-fact video. Just give me the script in your response. Without quotes also\" },\n    { \"role\": \"user\", \"content\": \"Create a 15s voice-over script about {{ $json.Topic }}.\" }\n  ],\n  \"temperature\": 0.7,\n  \"max_tokens\": 120\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        140
+      ],
+      "id": "5de22d5c-7407-40dd-b823-460d608dd4a4",
+      "name": "Generate voice-over script",
+      "alwaysOutputData": false,
+      "credentials": {
+        "openRouterApi": {
+          "id": "LsCnviNdtrMvE2Yq",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "67867d45-445a-4787-b47d-f13c13ba5660",
+              "name": "voiceText",
+              "value": "={{ $node[\"Generate voice-over script\"].json.choices[0].message.content }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        640,
+        140
+      ],
+      "id": "55c08eab-1a7e-407b-90ea-8d0112919361",
+      "name": "Parse Response"
+    },
+    {
+      "parameters": {
+        "command": "=#!/bin/bash\necho \"{{ $node['Parse Response'].json.voiceText }}\" > /home/node/audio/voice.txt\n\n# Use espeak-ng to convert the text to WAV (16kHz mono)\nespeak-ng -f /home/node/audio/voice.txt -w /home/node/audio/voice.wav -s 140\n\n# Convert WAV to MP3 using FFmpeg\nffmpeg -y -i /home/node/audio/voice.wav -codec:a libmp3lame -qscale:a 4 /home/node/audio/voice.mp3\n\n# Remove the temporary files\nrm /home/node/audio/voice.txt /home/node/audio/voice.wav\n"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        860,
+        140
+      ],
+      "id": "9d177a67-8a62-4aa8-96e9-8016588b92cd",
+      "name": "Generate voice-over"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/audio/voice.mp3",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        140
+      ],
+      "id": "94169a14-4042-4cb9-8441-983799cb0b5b",
+      "name": "Read voice-over"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Pexels Response": {
+      "main": [
+        [
+          {
+            "node": "Download Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search on Pexels": {
+      "main": [
+        [
+          {
+            "node": "Parse Pexels Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Video": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Variables": {
+      "main": [
+        [
+          {
+            "node": "Generate voice-over script",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Search on Pexels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate voice-over script": {
+      "main": [
+        [
+          {
+            "node": "Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Response": {
+      "main": [
+        [
+          {
+            "node": "Generate voice-over",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate voice-over": {
+      "main": [
+        [
+          {
+            "node": "Read voice-over",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "4902e605-f932-4096-b1d3-155285305871",
+  "meta": {
+    "instanceId": "1662c9da33df1a49b04221e79041a406f497f4a518f9184e1e5d9afa38403363"
+  },
+  "id": "WgTPccxVie5UsQxe",
+  "tags": []
+}
