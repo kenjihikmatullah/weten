@@ -19,8 +19,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1660,
-        -140
+        680,
+        -100
       ],
       "id": "b2957785-c0ab-4012-8431-ab74ea23a688",
       "name": "Parse Pexels Response"
@@ -35,7 +35,7 @@
           "parameters": [
             {
               "name": "query",
-              "value": "=“{{ $json.voiceText }}”"
+              "value": "=“{{ $json.Topic }}”"
             },
             {
               "name": "per_page",
@@ -56,8 +56,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1440,
-        -140
+        460,
+        -100
       ],
       "id": "42d53ef9-d5a2-4f99-bf65-b71ec1579ff9",
       "name": "Search on Pexels",
@@ -82,8 +82,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1860,
-        -140
+        880,
+        -100
       ],
       "id": "977f0257-9819-4d86-bc37-120afb0a7556",
       "name": "Download Video"
@@ -131,8 +131,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        440,
-        0
+        460,
+        160
       ],
       "id": "5de22d5c-7407-40dd-b823-460d608dd4a4",
       "name": "Generate voice-over script",
@@ -161,8 +161,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        620,
-        0
+        700,
+        160
       ],
       "id": "55c08eab-1a7e-407b-90ea-8d0112919361",
       "name": "Parse Response"
@@ -174,8 +174,8 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        1020,
-        280
+        960,
+        160
       ],
       "id": "9d177a67-8a62-4aa8-96e9-8016588b92cd",
       "name": "Generate voice-over"
@@ -187,7 +187,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        2700,
+        1720,
         20
       ],
       "id": "0ddd0fd7-402f-4c1c-a55d-793d241effbe",
@@ -201,7 +201,7 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        2920,
+        1900,
         20
       ],
       "id": "ca2f7cf9-d2cd-4558-8669-354cb492f072",
@@ -212,7 +212,7 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        2540,
+        1560,
         20
       ],
       "id": "4d00f1d3-a3c5-4605-873b-c0c5469ea101",
@@ -228,8 +228,8 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        1240,
-        280
+        1160,
+        160
       ],
       "id": "d86edb0f-b9d4-4758-abd0-c64320f6a175",
       "name": "Preview Voice"
@@ -244,8 +244,8 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        2260,
-        -140
+        1280,
+        -100
       ],
       "id": "48e84dc3-6887-42d3-a499-aaa6e98c48be",
       "name": "Preview Video Footage"
@@ -259,61 +259,11 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        2060,
-        -140
+        1080,
+        -100
       ],
       "id": "f2083c71-4ae6-4216-97d8-6b45c9dcdf7b",
       "name": "Read/Write Files from Disk"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://openrouter.ai/api/v1/chat/completions",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "openRouterApi",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"meta-llama/llama-4-maverick:free\",\n  \"messages\": [\n    { \"role\": \"system\", \"content\": \"You are an content creation expert. You expert on generating most proper query to find video footages on pexels which 99% based on 'topic' and 1% based on 'voice-over script'. The query will be passed when calling Pexels API. Ensure the query is concise and specific so that it's not bias to another context. Just give me the query in your response. Without quotes also\" },\n    { \"role\": \"user\", \"content\": \"Create the best query to find videos 99% about topic '{{ $node[\"Variables\"].json.Topic }}' and 1% about voice script '{{ $json.voiceText }}'\" }\n  ],\n  \"temperature\": 0.7,\n  \"max_tokens\": 120\n}\n",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        980,
-        -140
-      ],
-      "id": "f50d7056-7d6d-4aeb-a933-afdfcab9a40e",
-      "name": "Generate Pexels Query",
-      "alwaysOutputData": false,
-      "credentials": {
-        "openRouterApi": {
-          "id": "LsCnviNdtrMvE2Yq",
-          "name": "OpenRouter account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "67867d45-445a-4787-b47d-f13c13ba5660",
-              "name": "voiceText",
-              "value": "={{ $node[\"Generate Pexels Query\"].json.choices[0].message.content }}",
-              "type": "string"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        1220,
-        -140
-      ],
-      "id": "ab53b4e3-cf62-47b4-abcc-dd1f656cb8a6",
-      "name": "Parse Generated Paxel Query"
     }
   ],
   "pinData": {},
@@ -369,6 +319,11 @@
             "node": "Generate voice-over script",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Search on Pexels",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -389,11 +344,6 @@
         [
           {
             "node": "Generate voice-over",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Generate Pexels Query",
             "type": "main",
             "index": 0
           }
@@ -465,35 +415,13 @@
           }
         ]
       ]
-    },
-    "Generate Pexels Query": {
-      "main": [
-        [
-          {
-            "node": "Parse Generated Paxel Query",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Generated Paxel Query": {
-      "main": [
-        [
-          {
-            "node": "Search on Pexels",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
     }
   },
   "active": false,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "1abb7cf4-cc7c-450f-ad26-43dd76cd3f44",
+  "versionId": "b1a4585c-6430-4e90-858f-404983e1b3fa",
   "meta": {
     "instanceId": "1662c9da33df1a49b04221e79041a406f497f4a518f9184e1e5d9afa38403363"
   },
