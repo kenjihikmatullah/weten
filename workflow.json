@@ -177,7 +177,7 @@
     },
     {
       "parameters": {
-        "command": "=#!/bin/bash\necho \"{{ $node['Parse Response'].json.voiceText }}\" > /home/node/audio/voice.txt\n\n# Use espeak-ng to convert the text to WAV (16kHz mono)\nespeak-ng -f /home/node/audio/voice.txt -w /home/node/audio/voice.wav -s 140\n\n# Convert WAV to MP3 using FFmpeg\nffmpeg -y -i /home/node/audio/voice.wav -codec:a libmp3lame -qscale:a 4 /home/node/audio/voice.mp3\n\n# Remove the temporary files\nrm /home/node/audio/voice.txt /home/node/audio/voice.wav\n"
+        "command": "=#!/bin/bash\n# Generate WAV using Coqui TTS\ntts \\\n  --text \"{{ $node['Parse Response'].json.voiceText }}\" \\\n  --model_name tts_models/en/ljspeech/tacotron2-DDC \\\n  --vocoder_name vocoder_models/en/ljspeech/hifigan_v2 \\\n  --out_path /home/node/audio/voice.wav\n\n# Convert WAV to MP3 with ffmpeg\nffmpeg -y -i /home/node/audio/voice.wav -codec:a libmp3lame -qscale:a 4 /home/node/audio/voice.mp3\n\n# Remove temporary file\nrm /home/node/audio/voice.wav\n"
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
@@ -303,7 +303,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "4902e605-f932-4096-b1d3-155285305871",
+  "versionId": "75c3f430-da04-4ec5-948b-cb7d80f4df81",
   "meta": {
     "instanceId": "1662c9da33df1a49b04221e79041a406f497f4a518f9184e1e5d9afa38403363"
   },
