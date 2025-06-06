@@ -1,5 +1,5 @@
 {
-  "name": "My workflow",
+  "name": "Weten",
   "nodes": [
     {
       "parameters": {},
@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const videos = $node[\"Search on Pexels\"].json.videos;\nif (!videos || videos.length === 0) {\n  throw new Error(\"No video found.\");\n}\n// Take video having low-resolution (height<=540)\nconst files = videos[0].video_files;\nconst preview = files.find(f => f.height <= 540) || files[0];\nreturn [{ json: { clipUrl: preview.link } }];\n"
+        "jsCode": "let videos = $node[\"Search on Pexels\"].json.videos;\nvideos = videos.filter(v => v.duration >= 15 && v.duration <= 25)\nif (!videos || videos.length === 0) {\n  throw new Error(\"No video found.\");\n}\n// Take video having low-resolution (height<=540)\nconst files = videos[0].video_files;\nconst preview = files.find(f => f.height <= 540) || files[0];\nreturn [{ json: { clipUrl: preview.link } }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -39,7 +39,15 @@
             },
             {
               "name": "per_page",
-              "value": "1"
+              "value": "80"
+            },
+            {
+              "name": "orientation",
+              "value": "portrait"
+            },
+            {
+              "name": "size",
+              "value": "small"
             }
           ]
         },
@@ -87,7 +95,7 @@
             {
               "id": "c8479495-d0ac-42d2-9d8e-2063f82c1146",
               "name": "Topic",
-              "value": "Fun Fact about Football (Soccer)",
+              "value": "Fun Fact about Badminton",
               "type": "string"
             }
           ]
@@ -117,7 +125,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"meta-llama/llama-4-maverick:free\",\n  \"messages\": [\n    { \"role\": \"system\", \"content\": \"You are a voice-over script writer for a 15-second fun-fact video. Just give me the script in your response. Without quotes also\" },\n    { \"role\": \"user\", \"content\": \"Create a 15s voice-over script about {{ $json.Topic }}.\" }\n  ],\n  \"temperature\": 0.7,\n  \"max_tokens\": 120\n}\n",
+        "jsonBody": "={\n  \"model\": \"meta-llama/llama-4-maverick:free\",\n  \"messages\": [\n    { \"role\": \"system\", \"content\": \"You are a voice-over script writer. Produce a single, coherent script of about 35–40 words in plain English, designed to take close to 15 seconds when spoken at a normal pace by Coqui TTS. Just give me the script in your response. Without quotes also\" },\n    { \"role\": \"user\", \"content\": \"Create a 15s voice-over script about {{ $json.Topic }}.\" }\n  ],\n  \"temperature\": 0.7,\n  \"max_tokens\": 120\n}\n",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -413,7 +421,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "aabbfaa7-2372-477f-a539-ab310f298808",
+  "versionId": "519bb190-362f-41e9-a22a-d0b0a04cc4ea",
   "meta": {
     "instanceId": "1662c9da33df1a49b04221e79041a406f497f4a518f9184e1e5d9afa38403363"
   },
