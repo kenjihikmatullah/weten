@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "jsCode": "let videos = $node[\"Search on Pexels\"].json.videos;\nvideos = videos.filter(v => v.duration >= 15 && v.duration <= 25)\nif (!videos || videos.length === 0) {\n  throw new Error(\"No video found.\");\n}\n// Take video having low-resolution (height<=540)\nconst files = videos[0].video_files;\nconst preview = files.find(f => f.height <= 540) || files[0];\nreturn [{ json: { clipUrl: preview.link } }];\n"
+        "jsCode": "let videos = $node[\"Search on Pexels\"].json.videos;\nvideos = videos.filter(v => v.duration >= 15 && v.duration <= 25)\nif (!videos || videos.length === 0) {\n  throw new Error(\"No video found.\");\n}\n\n// Pick a random video from the filtered list\nconst randomIndex = Math.floor(Math.random() * videos.length);\nconst selectedVideo = videos[randomIndex];\n\n// Pick any available video file (no height filter)\nconst preview = selectedVideo.video_files[0]; // Usually sorted by quality\nreturn [{ json: { clipUrl: preview.link } }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -421,7 +421,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "b1a4585c-6430-4e90-858f-404983e1b3fa",
+  "versionId": "4e163165-05bb-4b4b-b9b4-b7e396d532ae",
   "meta": {
     "instanceId": "1662c9da33df1a49b04221e79041a406f497f4a518f9184e1e5d9afa38403363"
   },
