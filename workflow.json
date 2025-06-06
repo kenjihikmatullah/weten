@@ -153,7 +153,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        640,
+        720,
         140
       ],
       "id": "55c08eab-1a7e-407b-90ea-8d0112919361",
@@ -166,7 +166,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        920,
+        1020,
         140
       ],
       "id": "9d177a67-8a62-4aa8-96e9-8016588b92cd",
@@ -174,12 +174,12 @@
     },
     {
       "parameters": {
-        "command": "cd /home/node\n\n# Merge video and voice → final.mp4\nffmpeg -y \\\n  -i videos/video.mp4 \\\n  -i audio/voice.mp3 \\\n  -c:v copy \\\n  -c:a aac \\\n  -shortest \\\n  videos/final.mp4\n"
+        "command": "cd /home/node\n\nrm -f videos/final.mp4\n\n# Merge video and voice → final.mp4\nffmpeg -y \\\n  -i videos/video.mp4 \\\n  -i audio/voice.mp3 \\\n  -map 0:v \\\n  -map 1:a \\\n  -c:v copy \\\n  -c:a aac \\\n  -shortest \\\n  videos/final.mp4\n"
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        1220,
+        2100,
         20
       ],
       "id": "0ddd0fd7-402f-4c1c-a55d-793d241effbe",
@@ -193,11 +193,69 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        1440,
+        2320,
         20
       ],
       "id": "ca2f7cf9-d2cd-4558-8669-354cb492f072",
       "name": "Read Final Video"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1940,
+        20
+      ],
+      "id": "4d00f1d3-a3c5-4605-873b-c0c5469ea101",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/audio/voice.mp3",
+        "options": {
+          "dataPropertyName": "audio"
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        140
+      ],
+      "id": "d86edb0f-b9d4-4758-abd0-c64320f6a175",
+      "name": "Preview Voice"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/videos/video.mp4",
+        "options": {
+          "dataPropertyName": "video"
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1460,
+        -100
+      ],
+      "id": "48e84dc3-6887-42d3-a499-aaa6e98c48be",
+      "name": "Preview Video Footage"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "/home/node/videos/video.mp4",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        -100
+      ],
+      "id": "f2083c71-4ae6-4216-97d8-6b45c9dcdf7b",
+      "name": "Read/Write Files from Disk"
     }
   ],
   "pinData": {},
@@ -239,7 +297,7 @@
       "main": [
         [
           {
-            "node": "Cook Video",
+            "node": "Read/Write Files from Disk",
             "type": "main",
             "index": 0
           }
@@ -288,7 +346,7 @@
       "main": [
         [
           {
-            "node": "Cook Video",
+            "node": "Preview Voice",
             "type": "main",
             "index": 0
           }
@@ -305,13 +363,57 @@
           }
         ]
       ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Cook Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preview Voice": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Preview Video Footage": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        [
+          {
+            "node": "Preview Video Footage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "dff676d9-6804-4a60-a228-fdcff41d86ee",
+  "versionId": "aabbfaa7-2372-477f-a539-ab310f298808",
   "meta": {
     "instanceId": "1662c9da33df1a49b04221e79041a406f497f4a518f9184e1e5d9afa38403363"
   },
