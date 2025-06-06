@@ -14,22 +14,6 @@
     },
     {
       "parameters": {
-        "operation": "write",
-        "fileName": "/home/node/videos/video.mp4",
-        "dataPropertyName": "=data",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.readWriteFile",
-      "typeVersion": 1,
-      "position": [
-        1120,
-        -100
-      ],
-      "id": "0de8d215-419a-4603-9a41-8e62d7e658b8",
-      "name": "Read/Write Files from Disk"
-    },
-    {
-      "parameters": {
         "jsCode": "const videos = $node[\"Search on Pexels\"].json.videos;\nif (!videos || videos.length === 0) {\n  throw new Error(\"No video found.\");\n}\n// Take video having low-resolution (height<=540)\nconst files = videos[0].video_files;\nconst preview = files.find(f => f.height <= 540) || files[0];\nreturn [{ json: { clipUrl: preview.link } }];\n"
       },
       "type": "n8n-nodes-base.code",
@@ -51,7 +35,7 @@
           "parameters": [
             {
               "name": "query",
-              "value": "“science+fact”"
+              "value": "=“{{ $json.Topic }}”"
             },
             {
               "name": "per_page",
@@ -182,7 +166,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        860,
+        920,
         140
       ],
       "id": "9d177a67-8a62-4aa8-96e9-8016588b92cd",
@@ -190,17 +174,30 @@
     },
     {
       "parameters": {
-        "fileSelector": "/home/node/audio/voice.mp3",
+        "command": "cd /home/node\n\n# Merge video and voice → final.mp4\nffmpeg -y \\\n  -i videos/video.mp4 \\\n  -i audio/voice.mp3 \\\n  -c:v copy \\\n  -c:a aac \\\n  -shortest \\\n  videos/final.mp4\n"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1220,
+        20
+      ],
+      "id": "0ddd0fd7-402f-4c1c-a55d-793d241effbe",
+      "name": "Cook Video"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/videos/final.mp4",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        1080,
-        140
+        1440,
+        20
       ],
-      "id": "94169a14-4042-4cb9-8441-983799cb0b5b",
-      "name": "Read voice-over"
+      "id": "ca2f7cf9-d2cd-4558-8669-354cb492f072",
+      "name": "Read Final Video"
     }
   ],
   "pinData": {},
@@ -242,7 +239,7 @@
       "main": [
         [
           {
-            "node": "Read/Write Files from Disk",
+            "node": "Cook Video",
             "type": "main",
             "index": 0
           }
@@ -291,7 +288,18 @@
       "main": [
         [
           {
-            "node": "Read voice-over",
+            "node": "Cook Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cook Video": {
+      "main": [
+        [
+          {
+            "node": "Read Final Video",
             "type": "main",
             "index": 0
           }
@@ -303,7 +311,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "75c3f430-da04-4ec5-948b-cb7d80f4df81",
+  "versionId": "dff676d9-6804-4a60-a228-fdcff41d86ee",
   "meta": {
     "instanceId": "1662c9da33df1a49b04221e79041a406f497f4a518f9184e1e5d9afa38403363"
   },
