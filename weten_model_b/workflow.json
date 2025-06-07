@@ -1,0 +1,123 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -460,
+        100
+      ],
+      "id": "c60445af-b965-4ce3-bd42-f3c3b35c8e69",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c8479495-d0ac-42d2-9d8e-2063f82c1146",
+              "name": "prompt",
+              "value": "A tutorial showing how to peel garlic in 10 seconds, smooth camera motion, upbeat style",
+              "type": "string"
+            },
+            {
+              "id": "7eb0eee5-3c60-4a7d-ab49-e0efe023cc9d",
+              "name": "duration",
+              "value": 15,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -240,
+        100
+      ],
+      "id": "84262728-07ee-4297-84ce-ba3b63b8a0fc",
+      "name": "Variables"
+    },
+    {
+      "parameters": {
+        "command": "=#!/bin/sh\necho \"=== N8N COMMAND DEBUG ===\"\necho \"Prompt: {{ $node['Variables'].json.prompt }}\"\necho \"Duration: {{ $json.duration }}\"\necho \"Current user: $(whoami)\"\necho \"Current directory: $(pwd)\"\necho \"Python version: $(python3 --version)\"\n\n# Check if script exists\nif [ -f \"/home/node/scripts/run_wan.py\" ]; then\n    echo \"✓ Script file exists\"\n    ls -la \"/home/node/scripts/run_wan.py\"\nelse\n    echo \"✗ Script file missing\"\n    echo \"Creating directories...\"\n    mkdir -p /home/node/scripts /home/node/videos\n    echo \"Directory contents:\"\n    ls -la /home/node/\nfi\n\n# Remove old output\nrm -f \"/home/node/videos/out.mp4\"\n\n# First run debug script\necho \"=== RUNNING DEBUG SCRIPT ===\"\npython3 -c \"\nimport sys\nimport os\nprint('Python path:', sys.path[:3])\nprint('Current dir:', os.getcwd())\nprint('Script exists:', os.path.exists('/home/node/scripts/run_wan.py'))\nprint('Videos dir exists:', os.path.exists('/home/node/videos'))\n\"\n\n# Call Python wrapper\necho \"=== CALLING WAN SCRIPT ===\"\npython3 /home/node/scripts/run_wan.py \"{{ $node['Variables'].json.prompt }}\" \"/home/node/videos/out.mp4\" {{ $json.duration }}\n\n# Check result\nif [ -f \"/home/node/videos/out.mp4\" ]; then\n    echo \"✓ Video file created\"\n    ls -la \"/home/node/videos/out.mp4\"\nelse\n    echo \"✗ Video file not created\"\n    echo \"Log file contents:\"\n    if [ -f \"/home/node/videos/wan_debug.log\" ]; then\n        tail -20 \"/home/node/videos/wan_debug.log\"\n    fi\nfi"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        100
+      ],
+      "id": "1d742c29-5b72-40bb-92c6-de45ccc5566c",
+      "name": "Generate Video"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/videos/out.mp4",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        200,
+        100
+      ],
+      "id": "a1637a89-7f5a-4384-b511-b11334a19f5a",
+      "name": "View Video"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Variables": {
+      "main": [
+        [
+          {
+            "node": "Generate Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Video": {
+      "main": [
+        [
+          {
+            "node": "View Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "View Video": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "8f35704d-78d7-4ac5-bb84-84f65e64eaac",
+  "meta": {
+    "instanceId": "0554e1f8cac339d1b3096b4715baa720352d948ed6060da00c7eee8e291777fc"
+  },
+  "id": "v0bunUPWC4npEtk7",
+  "tags": []
+}
