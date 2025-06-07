@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  weten-model-b:
+    build: .
+    container_name: weten-model-b
+    restart: always
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE}
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+
+    volumes:
+      - ${HOME}/weten-model-b/.n8n:/home/node/.n8n
+      - ./videos:/home/node/videos
+
+    ports:
+      - "5678:5678"
