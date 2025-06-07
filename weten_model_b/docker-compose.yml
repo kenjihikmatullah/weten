@@ -12,7 +12,8 @@ services:
 
     volumes:
       - ${HOME}/weten-model-b/.n8n:/home/node/.n8n
-      - ./videos:/home/node/videos
+      - ${HOME}/weten-model-b/videos:/home/node/videos
+      - ./scripts:/home/node/scripts
 
     ports:
       - "5678:5678"

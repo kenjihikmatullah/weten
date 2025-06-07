@@ -15,7 +15,9 @@ RUN pip3 install --break-system-packages --no-cache-dir \
 
 RUN git clone https://github.com/Wan-Video/Wan2.1.git /opt/Wan2.1 && \
     sed -i '/flash_attn/d' /opt/Wan2.1/requirements.txt && \
-    pip3 install --break-system-packages --no-cache-dir -r /opt/Wan2.1/requirements.txt
+    sed -i '/flash_attn/d' /opt/Wan2.1/pyproject.toml && \
+    pip3 install --break-system-packages --no-cache-dir -r /opt/Wan2.1/requirements.txt && \
+    pip3 install --break-system-packages --no-cache-dir -e /opt/Wan2.1 --no-deps
 
 USER node
 WORKDIR /home/node
