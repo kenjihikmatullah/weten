@@ -13,11 +13,17 @@ RUN npm install -g n8n
 RUN pip3 install --break-system-packages --no-cache-dir \
       torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
+RUN apt-get update && apt-get install -y git-lfs && git lfs install
+
 RUN git clone https://github.com/Wan-Video/Wan2.1.git /opt/Wan2.1 && \
-    sed -i '/flash_attn/d' /opt/Wan2.1/requirements.txt && \
-    sed -i '/flash_attn/d' /opt/Wan2.1/pyproject.toml && \
-    pip3 install --break-system-packages --no-cache-dir -r /opt/Wan2.1/requirements.txt && \
-    pip3 install --break-system-packages --no-cache-dir -e /opt/Wan2.1 --no-deps
+    cd /opt/Wan2.1 && \
+    git lfs install && git lfs pull && \
+    sed -i '/flash_attn/d' requirements.txt && \
+    sed -i '/flash_attn/d' pyproject.toml && \
+    pip3 install --break-system-packages --no-cache-dir -r requirements.txt && \
+    pip3 install --break-system-packages --no-cache-dir -e . --no-deps && \
+    pip3 install --break-system-packages --no-cache-dir einops && \
+    pip3 install --break-system-packages --no-cache-dir omegaconf
 
 USER node
 WORKDIR /home/node
