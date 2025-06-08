@@ -1,0 +1,109 @@
+{
+  "name": "Generate 5 AI Images",
+  "nodes": [
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "image_prompts",
+              "value": "beautiful sunset over mountains,modern city at night,peaceful forest morning,abstract geometric art,vintage car on road"
+            }
+          ]
+        }
+      },
+      "id": "start",
+      "name": "Image Prompts",
+      "type": "n8n-nodes-base.set",
+      "position": [250, 300],
+      "typeVersion": 3.2
+    },
+    {
+      "parameters": {
+        "jsCode": "const prompts = $input.first().json.image_prompts.split(',');\n\nconst results = [];\nfor (let i = 0; i < prompts.length; i++) {\n  const prompt = prompts[i].trim();\n  \n  const workflow = {\n    \"3\": {\n      \"inputs\": {\n        \"seed\": Math.floor(Math.random() * 1000000),\n        \"steps\": 20,\n        \"cfg\": 7,\n        \"sampler_name\": \"euler\",\n        \"scheduler\": \"normal\",\n        \"positive\": [\"6\", 0],\n        \"negative\": [\"7\", 0],\n        \"latent_image\": [\"5\", 0],\n        \"model\": [\"4\", 0]\n      },\n      \"class_type\": \"KSampler\"\n    },\n    \"4\": {\n      \"inputs\": {\n        \"ckpt_name\": \"v1-5-pruned-emaonly.ckpt\"\n      },\n      \"class_type\": \"CheckpointLoaderSimple\"\n    },\n    \"5\": {\n      \"inputs\": {\n        \"width\": 512,\n        \"height\": 512,\n        \"batch_size\": 1\n      },\n      \"class_type\": \"EmptyLatentImage\"\n    },\n    \"6\": {\n      \"inputs\": {\n        \"text\": prompt,\n        \"clip\": [\"4\", 1]\n      },\n      \"class_type\": \"CLIPTextEncode\"\n    },\n    \"7\": {\n      \"inputs\": {\n        \"text\": \"blurry, low quality, ugly, distorted\",\n        \"clip\": [\"4\", 1]\n      },\n      \"class_type\": \"CLIPTextEncode\"\n    },\n    \"8\": {\n      \"inputs\": {\n        \"samples\": [\"3\", 0],\n        \"vae\": [\"4\", 2]\n      },\n      \"class_type\": \"VAEDecode\"\n    },\n    \"9\": {\n      \"inputs\": {\n        \"filename_prefix\": `image_${i+1}_`,\n        \"images\": [\"8\", 0]\n      },\n      \"class_type\": \"SaveImage\"\n    }\n  };\n  \n  results.push({\n    json: {\n      prompt: prompt,\n      image_number: i + 1,\n      client_id: \"n8n_client\",\n      prompt: workflow\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "prepare",
+      "name": "Prepare ComfyUI Workflows",
+      "type": "n8n-nodes-base.code",
+      "position": [450, 300],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8188/prompt",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonData": "={{ $json }}"
+      },
+      "id": "generate",
+      "name": "Generate Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [650, 300],
+      "typeVersion": 4.1
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst prompt = $input.first().json.prompt;\n\nif (response.prompt_id) {\n  return [{\n    json: {\n      success: true,\n      prompt_id: response.prompt_id,\n      image_number: $input.first().json.image_number,\n      original_prompt: prompt,\n      status: \"queued\",\n      timestamp: new Date().toISOString()\n    }\n  }];\n} else {\n  return [{\n    json: {\n      success: false,\n      error: \"Failed to queue image generation\",\n      response: response\n    }\n  }];\n}"
+      },
+      "id": "result",
+      "name": "Process Result",
+      "type": "n8n-nodes-base.code",
+      "position": [850, 300],
+      "typeVersion": 2
+    }
+  ],
+  "connections": {
+    "Image Prompts": {
+      "main": [
+        [
+          {
+            "node": "Prepare ComfyUI Workflows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare ComfyUI Workflows": {
+      "main": [
+        [
+          {
+            "node": "Generate Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Image": {
+      "main": [
+        [
+          {
+            "node": "Process Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-06-08T12:00:00.000Z",
+  "versionId": "1"
+}

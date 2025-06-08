@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  ai-generator:
+    build: .
+    ports:
+      - "8188:8188"  # ComfyUI
+      - "5678:5678"  # n8n
+      - "6379:6379"  # Redis (optional external access)
+    volumes:
+      - ./models:/app/comfyui/models
+      - ./output:/app/comfyui/output
+      - ./n8n-data:/app/n8n
+      - ./logs:/app/logs
+    environment:
+      - COMFYUI_HOST=0.0.0.0
+      - COMFYUI_PORT=8188
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_BASIC_AUTH_ACTIVE=false
+    restart: unless-stopped
+    container_name: ai-image-generator
