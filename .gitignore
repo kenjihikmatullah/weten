@@ -1,4 +1,6 @@
-**/.env
+**/.env*
 */scripts
 */logs
 */n8n-data
+**/.temp
+**/.branches
