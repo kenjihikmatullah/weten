@@ -9,8 +9,8 @@ export class RunpodClient {
   private apiKey: string
 
   constructor() {
-    this.endpoint = process.env.RUNPOD_API_URL ?? ''
-    this.apiKey = process.env.RUNPOD_API_KEY ?? ''
+    this.endpoint = Deno.env.get('RUNPOD_API_URL') ?? ''
+    this.apiKey = Deno.env.get('RUNPOD_API_KEY') ?? ''
   }
 
   async generateVideo(input: RunpodInput): Promise<string> {

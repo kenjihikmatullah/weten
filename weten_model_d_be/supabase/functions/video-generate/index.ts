@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders } from '../_shared/cors.ts'
-import { GenerateVideoRequest } from './tools/types.ts'
-import { DbClient } from './tools/db.ts'
-import { RunpodClient } from './tools/runpod.ts'
-import { validateAuthToken } from "./tools/auth.ts"
+import { GenerateVideoRequest } from '../_shared/video/types.ts'
+import { DbClient } from '../_shared/video/db.ts'
+import { RunpodClient } from '../_shared/video/runpod.ts'
+import { validateAuthToken } from "../_shared/auth.ts"
 
 serve(async (req) => {
   // Handle CORS

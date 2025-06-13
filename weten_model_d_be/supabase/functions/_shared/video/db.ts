@@ -1,13 +1,13 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import { VideoGeneration } from './types'
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
+import { VideoGeneration } from './types.ts'
 
 export class DbClient {
   private client: SupabaseClient
 
   constructor() {
     this.client = createClient(
-      process.env.SUPABASE_URL ?? '',
-      process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
   }
 
