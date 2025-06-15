@@ -1,8 +1,9 @@
+// Generate video
 export interface GenerateVideoRequest {
   prompt: string;
-  resolution: string;
-  duration: number;
-  form: string;
+  resolution?: string;
+  duration?: number;
+  form?: string;
 }
 
 export interface GenerateVideoResponse {
@@ -22,4 +23,20 @@ export interface VideoGeneration {
   form: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// Get video list
+export interface VideoListResponse {
+  video_generation_id: number;
+  video_id?: number;
+  status: string;
+  url?: string;
+  title?: string;
+  description?: string;
+  prompt: string;
+  resolution: string;
+  duration: number;
+  form: string;
+  startedGenerationAt: string;
+  finishedGenerationAt?: string;
 }
