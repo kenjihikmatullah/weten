@@ -1,6 +1,13 @@
 {
-    "input": {
-        "prompt": "John Doe",
-        "seconds": 15
-    }
+  "input": {
+    "prompt": "A majestic dragon flying over a medieval castle at sunset, cinematic lighting, 4K quality",
+    "duration": 5.0,
+    "resolution": "854x480",
+    "model": "wan-2.1-1.3b",
+    "num_inference_steps": 30,
+    "guidance_scale": 7.5,
+    "output_method": "both",
+    "supabase_bucket": "videos",
+    "filename": "dragon_castle_sunset.mp4"
+  }
 }
