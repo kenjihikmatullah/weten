@@ -430,7 +430,7 @@ def handler(job):
         error_msg = f"Error processing job: {str(e)}"
         logger.error(error_msg)
         logger.error(traceback.format_exc())
-        return {"error": error_msg}
+        return {"error": error_msg, "traceback": traceback.format_exc()}
 
 if __name__ == "__main__":
     logger.info("Starting RunPod serverless worker...")
