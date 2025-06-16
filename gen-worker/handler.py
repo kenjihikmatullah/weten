@@ -81,38 +81,55 @@ class VideoGenerator:
                 if not model_config:
                     raise ValueError(f"Unknown model: {model_key}")
                 
-                logger.info(f"Loading {model_key} model...")
-                
-                # Optimize memory usage during model loading
-                torch.cuda.empty_cache()
-                
-                self.pipeline = DiffusionPipeline.from_pretrained(
-                    model_config["name"],
-                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                    use_safetensors=True,
-                    variant="fp16" if self.device == "cuda" else None
-                )
-                
+                # Log GPU status before loading
                 if self.device == "cuda":
-                    self.pipeline = self.pipeline.to(self.device)
-                    
-                    # Apply memory and performance optimizations
-                    if model_config["memory_optimization"]:
-                        self.pipeline.enable_xformers_memory_efficient_attention()
-                        self.pipeline.enable_model_cpu_offload()
-                    
-                    if model_config["attention_slicing"]:
-                        self.pipeline.enable_attention_slicing(1)
-                    
-                    if model_config["channels_last"]:
-                        self.pipeline.unet = self.pipeline.unet.to(memory_format=torch.channels_last)
+                    logger.info(f"GPU Memory before loading:")
+                    logger.info(f"- Total: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f}GB")
+                    logger.info(f"- Reserved: {torch.cuda.memory_reserved(0) / 1e9:.2f}GB")
+                    logger.info(f"- Allocated: {torch.cuda.memory_allocated(0) / 1e9:.2f}GB")
                 
-                self.current_model = model_key
-                logger.info(f"Model {model_key} loaded with optimizations")
-                return True
+                logger.info(f"Starting to load model {model_key} from {model_config['name']}...")
                 
+                try:
+                    self.pipeline = DiffusionPipeline.from_pretrained(
+                        model_config["name"],
+                        torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                        use_safetensors=True,
+                        variant="fp16" if self.device == "cuda" else None,
+                        resume_download=True,
+                        local_files_only=False
+                    )
+                    logger.info("Model downloaded successfully")
+                except Exception as e:
+                    logger.error(f"Failed to download/load model: {str(e)}")
+                    logger.error(traceback.format_exc())
+                    return False
+                
+                try:
+                    if self.device == "cuda":
+                        logger.info("Moving model to GPU...")
+                        self.pipeline = self.pipeline.to(self.device)
+                        logger.info("Model moved to GPU successfully")
+                        
+                        if model_config["memory_optimization"]:
+                            logger.info("Applying memory optimizations...")
+                            self.pipeline.enable_xformers_memory_efficient_attention()
+                            if model_config["attention_slicing"]:
+                                self.pipeline.enable_attention_slicing(1)
+                        
+                        if model_config["channels_last"]:
+                            self.pipeline.unet = self.pipeline.unet.to(memory_format=torch.channels_last)
+                except Exception as e:
+                    logger.error(f"Failed to optimize model: {str(e)}")
+                    logger.error(traceback.format_exc())
+                    return False
+            
+            self.current_model = model_key
+            logger.info(f"Model {model_key} loaded successfully")
+            return True
+            
         except Exception as e:
-            logger.error(f"Error loading model: {str(e)}")
+            logger.error(f"Error in load_model: {str(e)}")
             logger.error(traceback.format_exc())
             return False
     
