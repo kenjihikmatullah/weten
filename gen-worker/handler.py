@@ -82,12 +82,17 @@ class VideoGenerator:
                     raise ValueError(f"Unknown model: {model_key}")
                 
                 logger.info(f"Loading {model_key} model from {model_config['name']}...")
-                logger.info(f"Available VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f}GB")
+                logger.info(f"GPU Info - Device: {self.device}")
+                if self.device == "cuda":
+                    logger.info(f"CUDA Device: {torch.cuda.get_device_name()}")
+                    logger.info(f"Available VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f}GB")
+                    logger.info(f"Current VRAM Usage: {torch.cuda.memory_allocated() / 1e9:.2f}GB")
                 
                 # Optimize memory usage during model loading
                 torch.cuda.empty_cache()
                 
                 try:
+                    logger.info("Attempting to download/load model...")
                     self.pipeline = DiffusionPipeline.from_pretrained(
                         model_config["name"],
                         torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
@@ -99,12 +104,15 @@ class VideoGenerator:
                     logger.info("Model downloaded and loaded successfully")
                 except Exception as e:
                     logger.error(f"Model download/load failed: {str(e)}")
-                    # Check if model exists in cache
+                    logger.error(f"Full traceback: {traceback.format_exc()}")
+                    
+                    # Check model cache
                     cache_dir = os.path.join("/app/cache", "models--" + model_config["name"].replace("/", "--"))
+                    logger.info(f"Checking cache directory: {cache_dir}")
                     if os.path.exists(cache_dir):
-                        logger.info(f"Found model in cache: {cache_dir}")
+                        logger.info(f"Cache directory contents: {os.listdir(cache_dir)}")
                     else:
-                        logger.error(f"Model not found in cache: {cache_dir}")
+                        logger.error(f"Cache directory not found: {cache_dir}")
                     raise
             
             if self.device == "cuda":
