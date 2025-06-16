@@ -50,7 +50,7 @@ class VideoGenerator:
         # Update model configurations with optimized settings
         self.model_configs = {
             "wan-2.1-14b": {
-                "name": "alibaba-pai/Wan-2.1-T2V-14B",
+                "name": "Wan-AI/Wan2.1-T2V-14B",
                 "memory_optimization": True,
                 "recommended_steps": 50,
                 "attention_slicing": True,
@@ -58,7 +58,7 @@ class VideoGenerator:
                 "batch_size": 1
             },
             "wan-2.1-1.3b": {
-                "name": "alibaba-pai/Wan-2.1-T2V-1.3B",
+                "name": "Wan-AI/Wan2.1-T2V-1.3B",
                 "memory_optimization": False,
                 "recommended_steps": 30,
                 "attention_slicing": False,
@@ -81,22 +81,44 @@ class VideoGenerator:
                 if not model_config:
                     raise ValueError(f"Unknown model: {model_key}")
                 
-                logger.info(f"Loading {model_key} model...")
+                logger.info(f"Loading {model_key} model from {model_config['name']}...")
+                logger.info(f"Available VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f}GB")
                 
                 # Optimize memory usage during model loading
                 torch.cuda.empty_cache()
                 
-                self.pipeline = DiffusionPipeline.from_pretrained(
-                    model_config["name"],
-                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                    use_safetensors=True,
-                    variant="fp16" if self.device == "cuda" else None
-                )
-                
-                if self.device == "cuda":
+                try:
+                    self.pipeline = DiffusionPipeline.from_pretrained(
+                        model_config["name"],
+                        torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                        use_safetensors=True,
+                        variant="fp16" if self.device == "cuda" else None,
+                        resume_download=True,  # Resume interrupted downloads
+                        local_files_only=False  # Force check online
+                    )
+                    logger.info("Model downloaded and loaded successfully")
+                except Exception as e:
+                    logger.error(f"Model download/load failed: {str(e)}")
+                    # Check if model exists in cache
+                    cache_dir = os.path.join("/app/cache", "models--" + model_config["name"].replace("/", "--"))
+                    if os.path.exists(cache_dir):
+                        logger.info(f"Found model in cache: {cache_dir}")
+                    else:
+                        logger.error(f"Model not found in cache: {cache_dir}")
+                    raise
+            
+            if self.device == "cuda":
+                try:
+                    logger.info("Moving model to GPU...")
                     self.pipeline = self.pipeline.to(self.device)
-                    
-                    # Apply memory and performance optimizations
+                    logger.info("Model moved to GPU successfully")
+                except Exception as e:
+                    logger.error(f"Failed to move model to GPU: {str(e)}")
+                    raise
+                
+                try:
+                    # Apply optimizations
+                    logger.info("Applying model optimizations...")
                     if model_config["memory_optimization"]:
                         self.pipeline.enable_xformers_memory_efficient_attention()
                         self.pipeline.enable_model_cpu_offload()
@@ -106,13 +128,18 @@ class VideoGenerator:
                     
                     if model_config["channels_last"]:
                         self.pipeline.unet = self.pipeline.unet.to(memory_format=torch.channels_last)
-                
-                self.current_model = model_key
-                logger.info(f"Model {model_key} loaded with optimizations")
-                return True
-                
+                    
+                    logger.info("Model optimizations applied successfully")
+                except Exception as e:
+                    logger.error(f"Failed to apply optimizations: {str(e)}")
+                    raise
+            
+            self.current_model = model_key
+            logger.info(f"Model {model_key} fully loaded and ready")
+            return True
+            
         except Exception as e:
-            logger.error(f"Error loading model: {str(e)}")
+            logger.error(f"Error loading model {model_key}: {str(e)}")
             logger.error(traceback.format_exc())
             return False
     
