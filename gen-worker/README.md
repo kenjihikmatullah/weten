@@ -1,260 +1,156 @@
 # RunPod Serverless Text-to-Video Worker
 
-Worker untuk generate video dari text prompt menggunakan Wan 2.1 models di RunPod serverless dengan optimized Supabase integration.
+High-performance text-to-video generation worker using Wan 2.1 models on RunPod serverless with Supabase integration.
 
-## Features
+## Key Features
 
-- **Multi-model support**: Wan 2.1-T2V-14B (high quality) dan Wan 2.1-T2V-1.3B (faster)
-- **Flexible parameters**: prompt, duration, resolution, model selection
-- **Smart memory management**: Automatic optimization based on model size
-- **Multiple output methods**: Base64, Supabase upload, atau both
-- **Supabase integration**: Direct upload ke Supabase Storage
-- **Optimized transfer**: Efficient handling untuk Supabase Edge Functions
+- Generate videos from text prompts using Wan 2.1 models
+- Smart GPU memory optimization
+- Multiple output methods (Base64/Supabase)
+- CUDA-flexible architecture
+- Optimized for minimal latency
 
-## Transfer Method Recommendations
+## Models
 
-### 🎯 **RECOMMENDED for Supabase Integration**
-```json
-{
-  "output_method": "supabase",
-  "supabase_bucket": "videos"
-}
-```
-**Why?**
-- ✅ No size limits (base64 has ~33% overhead)
-- ✅ Direct CDN URL untuk client access
-- ✅ Automatic cleanup dari RunPod worker
-- ✅ Faster transfer ke Edge Functions
-- ✅ Better memory efficiency
+| Model | Quality | Speed | VRAM Usage |
+|-------|---------|-------|------------|
+| `wan-2.1-14b` | High | Slower | ~14GB |
+| `wan-2.1-1.3b` | Good | Faster | ~8GB |
 
-### ⚠️ **NOT Recommended for Large Videos**
-```json
-{
-  "output_method": "base64"
-}
-```
-**Limitations:**
-- ❌ 33% size increase due to base64 encoding
-- ❌ Edge Functions timeout risk (>25MB videos)
-- ❌ Memory intensive untuk transfer
-- ❌ Manual handling needed
+## Quick Start
 
-## Available Models
-
-| Model | Size | Speed | Quality | Memory | Recommended Use |
-|-------|------|--------|---------|---------|-----------------|
-| `wan-2.1-14b` | 14B | Slower | Highest | High | Production, high-quality |
-| `wan-2.1-1.3b` | 1.3B | Faster | Good | Lower | Development, quick tests |
-
-## Setup
-
-### 1. Build Docker Image
+### Deploy to RunPod
 
 ```bash
+# Build image
 docker build -t your-username/text-to-video-worker .
-```
 
-### 2. Push ke Docker Registry
-
-```bash
+# Push to registry
 docker push your-username/text-to-video-worker
 ```
 
-### 3. Deploy ke RunPod
+Then deploy on RunPod Serverless with minimum 16GB VRAM GPU.
 
-1. Login ke RunPod dashboard
-2. Go to Serverless → Templates
-3. Create new template:
-   - Container Image: `your-username/text-to-video-worker`
-   - Container Registry Credentials: (jika private registry)
-   - GPU: pilih yang sesuai (minimal 16GB VRAM recommended)
+### Environment Variables
+
+```bash
+SUPABASE_URL=your-project-url
+SUPABASE_ANON_KEY=your-anon-key
+```
+
+## Usage Examples
+
+### cURL Request
+```bash
+curl -X POST "https://api.runpod.ai/v2/{ENDPOINT_ID}/run" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${RUNPOD_API_KEY}" \
+  -d '{
+    "input": {
+      "prompt": "A beautiful sunset over ocean waves",
+      "duration": 4.0,
+      "resolution": "512x512",
+      "model": "wan-2.1-14b",
+      "output_method": "supabase"
+    }
+  }'
+```
+
+### Python Client
+```python
+import runpod
+
+runpod.api_key = "your-api-key"
+response = runpod.run(
+    endpoint_id="endpoint-id",
+    input={
+        "prompt": "A beautiful sunset over ocean waves",
+        "duration": 4.0,
+        "resolution": "512x512",
+        "model": "wan-2.1-14b",
+        "output_method": "supabase"
+    }
+)
+```
+
+### Edge Function
+```typescript
+const response = await fetch('/functions/v1/generate-video', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    prompt: "A beautiful sunset over ocean waves",
+    duration: 4.0,
+    resolution: "512x512",
+    model: "wan-2.1-14b"
+  })
+})
+```
 
 ## Input Parameters
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `prompt` | string | Yes | - | Text prompt untuk generate video |
-| `duration` | float | No | 3.0 | Durasi video dalam detik (max 30s) |
-| `resolution` | string | No | "512x512" | Resolusi video (format: "WIDTHxHEIGHT") |
-| `model` | string | No | "wan-2.1-14b" | Model selection: "wan-2.1-14b" or "wan-2.1-1.3b" |
-| `num_inference_steps` | int | No | Auto | Inference steps (auto-set based on model) |
-| `guidance_scale` | float | No | 7.5 | Guidance scale untuk generation |
-| `output_method` | string | No | "base64" | "base64", "supabase", or "both" |
-| `supabase_bucket` | string | No | "videos" | Supabase Storage bucket name |
-| `filename` | string | No | Auto | Custom filename (auto-generated if not provided) |
+| `prompt` | string | Yes | - | Generation prompt |
+| `duration` | float | No | 3.0 | Video duration (max 30s) |
+| `resolution` | string | No | "512x512" | Format: "WIDTHxHEIGHT" |
+| `model` | string | No | "wan-2.1-14b" | Model selection |
+| `output_method` | string | No | "base64" | "base64"/"supabase"/"both" |
 
-## Environment Variables
-
-For Supabase integration, set these in your RunPod template:
-
-```bash
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-```
-
-## Example Usage
-
-### 🚀 Recommended: Supabase Integration
-
-```python
-import runpod
-
-runpod.api_key = "your-api-key"
-
-# Optimal for Supabase Edge Functions
-job = runpod.run(
-    endpoint_id="your-endpoint-id",
-    job_input={
-        "prompt": "A beautiful sunset over ocean waves, cinematic",
-        "duration": 4.0,
-        "resolution": "768x512",
-        "model": "wan-2.1-1.3b",  # Faster for development
-        "output_method": "supabase",
-        "supabase_bucket": "videos",
-        "filename": "sunset_ocean.mp4"
-    }
-)
-
-result = runpod.status(job['id'])
-if result['status'] == 'COMPLETED':
-    video_url = result['output']['supabase']['url']
-    print(f"Video available at: {video_url}")
-```
-
-### Supabase Edge Function Call
-
-```typescript
-// From your frontend/client
-const response = await fetch('/functions/v1/generate-video', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    prompt: "A cat playing in a garden, realistic style",
-    duration: 3.0,
-    resolution: "512x512",
-    model: "wan-2.1-1.3b",
-    output_method: "supabase"
-  })
-})
-
-const result = await response.json()
-console.log('Video URL:', result.video_url)
-```
-
-### Base64 Method (untuk small videos only)
-
-```python
-# Only for short/small videos
-job = runpod.run(
-    endpoint_id="your-endpoint-id",
-    job_input={
-        "prompt": "Quick animation, 2 seconds",
-        "duration": 2.0,
-        "resolution": "256x256",
-        "model": "wan-2.1-1.3b",
-        "output_method": "base64"
-    }
-)
-```
-
-## Output Formats
+## Output Examples
 
 ### Supabase Method (Recommended)
 ```json
 {
   "success": true,
-  "video_url": "https://your-project.supabase.co/storage/v1/object/public/videos/video_123.mp4",
-  "filename": "video_123.mp4",
-  "prompt": "input-prompt",
-  "duration": 3.0,
-  "resolution": "512x512",
-  "model": "wan-2.1-1.3b",
+  "video_url": "https://supabase-url/videos/video_123.mp4",
   "size_bytes": 2458624,
-  "generation_time_seconds": 45
+  "generation_time": 45,
+  "metadata": {
+    "prompt": "input-prompt",
+    "model": "wan-2.1-14b",
+    "resolution": "512x512"
+  }
 }
 ```
 
 ### Base64 Method
 ```json
 {
-  "video": "base64-encoded-video-data",
-  "prompt": "input-prompt", 
-  "duration": 3.0,
-  "resolution": "512x512",
-  "model": "wan-2.1-1.3b",
+  "video": "base64-encoded-data",
   "size_bytes": 2458624,
   "status": "success"
 }
 ```
 
-### Both Methods
+## Performance Tips
+
+- Use `wan-2.1-1.3b` for testing/development
+- Prefer Supabase output for videos >10MB
+- Keep resolution ≤768x768 for faster generation
+- Use shorter durations when possible
+
+## Error Handling
+
+Common error responses:
 ```json
 {
-  "video_url": "https://storage-url.mp4",
-  "video_base64": "base64-data",
-  "filename": "custom_name.mp4",
-  "supabase": {
-    "url": "https://storage-url.mp4",
-    "filename": "custom_name.mp4"
-  },
-  "size_bytes": 2458624,
-  "status": "success"
+  "error": "Invalid model specified",
+  "available_models": ["wan-2.1-14b", "wan-2.1-1.3b"]
+}
+```
+```json
+{
+  "error": "GPU memory insufficient",
+  "minimum_required": "16GB VRAM"
 }
 ```
 
-## Performance Comparison
+## Requirements
 
-| Aspect | Base64 Transfer | Supabase Upload |
-|--------|----------------|-----------------|
-| **Size Overhead** | +33% | No overhead |
-| **Transfer Speed** | Slower (large payload) | Faster (URL only) |
-| **Memory Usage** | High | Low |
-| **Edge Function Timeout** | Risk for >10MB | No risk |
-| **Client Access** | Immediate | CDN optimized |
-| **Cleanup** | Manual | Automatic |
+- GPU: 16GB+ VRAM (A4000/A5000/A100)
+- CUDA compatible
+- FFmpeg installed
+- Python 3.8+
 
-## Deployment Architecture
-
-```
-Client → Supabase Edge Function → RunPod Worker → Supabase Storage
-    ↑                                                     ↓
-    └─────────────────── Video URL ←─────────────────────┘
-```
-
-**Benefits:**
-- Edge Function hanya transfer URL (lightweight)
-- Video tersimpan permanent di Supabase Storage
-- Client dapat akses video via CDN URL
-- Automatic cleanup di RunPod worker
-
-## Testing Locally
-
-```bash
-# Test dengan sample input
-python3 handler.py
-
-# Atau test dengan runpod local
-pip install runpod
-runpod test --input test_input.json
-```
-
-## Notes
-
-- Model akan di-download saat pertama kali dijalankan (sekitar 14GB)
-- Recommended GPU: A100 atau V100 dengan minimal 16GB VRAM
-- Generation time tergantung kompleksitas prompt dan duration
-- Video output dalam format MP4 dengan codec H.264
-
-## Troubleshooting
-
-1. **Out of Memory Error**: Kurangi resolution atau gunakan GPU dengan VRAM lebih besar
-2. **Model Loading Error**: Pastikan internet connection stabil dan HuggingFace access
-3. **Generation Slow**: Kurangi `num_inference_steps` atau `duration`
-
-## Future Improvements
-
-- [ ] Support multiple aspect ratios
-- [ ] Batch processing
-- [ ] Custom model fine-tuning integration
-- [ ] Advanced scheduling options
-- [ ] Video upscaling post-processing
+For detailed technical docs and advanced configurations, visit our [Wiki](https://github.com/your-repo/wiki).

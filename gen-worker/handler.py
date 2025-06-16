@@ -7,91 +7,110 @@ from diffusers import DiffusionPipeline
 import logging
 import traceback
 from typing import Dict, Any
-import cv2
 import numpy as np
 import imageio
 from supabase import create_client
 import uuid
 from datetime import datetime
+import torch.backends.cudnn as cudnn
+import gc
+from contextlib import contextmanager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+@contextmanager
+def torch_gc():
+    """Context manager to automatically handle GPU memory cleanup"""
+    try:
+        yield
+    finally:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+            gc.collect()
 
 class VideoGenerator:
     def __init__(self):
         self.pipeline = None
         self.current_model = None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        logger.info(f"Using device: {self.device}")
         
-        # Model configurations
+        # Enable cuDNN autotuner
+        if self.device == "cuda":
+            cudnn.benchmark = True
+            cudnn.deterministic = False
+            
+        logger.info(f"Using device: {self.device}")
+        if self.device == "cuda":
+            logger.info(f"CUDA Device: {torch.cuda.get_device_name()}")
+            logger.info(f"CUDA Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+        
+        # Update model configurations with optimized settings
         self.model_configs = {
             "wan-2.1-14b": {
                 "name": "alibaba-pai/Wan-2.1-T2V-14B",
                 "memory_optimization": True,
-                "recommended_steps": 50
+                "recommended_steps": 50,
+                "attention_slicing": True,
+                "channels_last": True,
+                "batch_size": 1
             },
             "wan-2.1-1.3b": {
-                "name": "alibaba-pai/Wan-2.1-T2V-1.3B", 
+                "name": "alibaba-pai/Wan-2.1-T2V-1.3B",
                 "memory_optimization": False,
-                "recommended_steps": 30
+                "recommended_steps": 30,
+                "attention_slicing": False,
+                "channels_last": True,
+                "batch_size": 1
             }
         }
         
     def load_model(self, model_key: str = "wan-2.1-14b"):
-        """Load the specified Wan model"""
+        """Load the specified Wan model with optimizations"""
         try:
-            # Check if model is already loaded
             if self.pipeline is not None and self.current_model == model_key:
-                logger.info(f"Model {model_key} already loaded")
                 return True
                 
-            # Clear existing model
-            if self.pipeline is not None:
-                logger.info("Clearing existing model from memory")
-                del self.pipeline
-                torch.cuda.empty_cache() if torch.cuda.is_available() else None
+            with torch_gc():
+                if self.pipeline is not None:
+                    del self.pipeline
                 
-            model_config = self.model_configs.get(model_key)
-            if not model_config:
-                raise ValueError(f"Unknown model: {model_key}. Available: {list(self.model_configs.keys())}")
+                model_config = self.model_configs.get(model_key)
+                if not model_config:
+                    raise ValueError(f"Unknown model: {model_key}")
                 
-            logger.info(f"Loading {model_key} model: {model_config['name']}...")
-            model_name = model_config["name"]
-            
-            self.pipeline = DiffusionPipeline.from_pretrained(
-                model_name,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                use_safetensors=True,
-                variant="fp16" if self.device == "cuda" else None
-            )
-            
-            if self.device == "cuda":
-                self.pipeline = self.pipeline.to(self.device)
+                logger.info(f"Loading {model_key} model...")
                 
-                # Apply memory optimizations based on model size
-                if model_config["memory_optimization"]:
-                    try:
-                        self.pipeline.enable_xformers_memory_efficient_attention()
-                        logger.info("xFormers memory efficient attention enabled")
-                    except:
-                        logger.warning("xFormers not available, using default attention")
+                # Optimize memory usage during model loading
+                torch.cuda.empty_cache()
+                
+                self.pipeline = DiffusionPipeline.from_pretrained(
+                    model_config["name"],
+                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                    use_safetensors=True,
+                    variant="fp16" if self.device == "cuda" else None
+                )
+                
+                if self.device == "cuda":
+                    self.pipeline = self.pipeline.to(self.device)
                     
-                    # Enable CPU offload for large models
-                    self.pipeline.enable_model_cpu_offload()
-                    logger.info("CPU offload enabled for memory optimization")
-                else:
-                    # For smaller models, keep everything on GPU
-                    try:
+                    # Apply memory and performance optimizations
+                    if model_config["memory_optimization"]:
                         self.pipeline.enable_xformers_memory_efficient_attention()
-                    except:
-                        pass
-            
-            self.current_model = model_key
-            logger.info(f"Model {model_key} loaded successfully!")
-            return True
-            
+                        self.pipeline.enable_model_cpu_offload()
+                    
+                    if model_config["attention_slicing"]:
+                        self.pipeline.enable_attention_slicing(1)
+                    
+                    if model_config["channels_last"]:
+                        self.pipeline.unet = self.pipeline.unet.to(memory_format=torch.channels_last)
+                
+                self.current_model = model_key
+                logger.info(f"Model {model_key} loaded with optimizations")
+                return True
+                
         except Exception as e:
             logger.error(f"Error loading model: {str(e)}")
             logger.error(traceback.format_exc())
@@ -101,88 +120,89 @@ class VideoGenerator:
                       model: str = "wan-2.1-14b", num_inference_steps: int = None, 
                       guidance_scale: float = 7.5, return_method: str = "base64") -> Dict[str, Any]:
         """Generate video from text prompt with flexible return options"""
-        try:
-            # Load model if needed
-            if self.pipeline is None or self.current_model != model:
-                if not self.load_model(model):
-                    raise Exception(f"Failed to load model: {model}")
-            
-            # Get model config for default inference steps
-            model_config = self.model_configs.get(model, {})
-            if num_inference_steps is None:
-                num_inference_steps = model_config.get("recommended_steps", 50)
-            
-            # Parse resolution
-            width, height = map(int, resolution.split('x'))
-            
-            # Calculate number of frames based on duration (assuming 24 fps)
-            fps = 24
-            num_frames = int(duration * fps)
-            
-            logger.info(f"Generating video with {model}: {prompt}")
-            logger.info(f"Resolution: {width}x{height}, Duration: {duration}s, Frames: {num_frames}")
-            
-            # Generate video
-            with torch.autocast(self.device):
-                result = self.pipeline(
-                    prompt=prompt,
-                    num_frames=num_frames,
-                    height=height,
-                    width=width,
-                    num_inference_steps=num_inference_steps,
-                    guidance_scale=guidance_scale,
-                    generator=torch.Generator(device=self.device).manual_seed(42)
-                )
-            
-            # Save video to temporary file
-            with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_file:
-                temp_path = temp_file.name
-            
-            # Convert frames to video
-            if hasattr(result, 'frames') and result.frames:
-                frames = result.frames[0]
-                self._save_frames_as_video(frames, temp_path, fps)
-            elif hasattr(result, 'videos') and result.videos is not None:
-                video_tensor = result.videos[0]
-                self._save_tensor_as_video(video_tensor, temp_path, fps)
-            else:
-                raise Exception("Unexpected output format from pipeline")
-            
-            # Return based on method
-            if return_method == "base64":
-                with open(temp_path, 'rb') as f:
-                    video_bytes = f.read()
-                video_base64 = base64.b64encode(video_bytes).decode('utf-8')
-                os.unlink(temp_path)
+        with torch_gc():
+            try:
+                # Load model if needed
+                if self.pipeline is None or self.current_model != model:
+                    if not self.load_model(model):
+                        raise Exception(f"Failed to load model: {model}")
                 
-                return {
-                    "video": video_base64,
-                    "size_bytes": len(video_bytes),
-                    "format": "base64"
-                }
+                # Get model config for default inference steps
+                model_config = self.model_configs.get(model, {})
+                if num_inference_steps is None:
+                    num_inference_steps = model_config.get("recommended_steps", 50)
                 
-            elif return_method == "file_info":
-                # Return file info for external upload
-                file_size = os.path.getsize(temp_path)
+                # Parse resolution
+                width, height = map(int, resolution.split('x'))
                 
-                # Read file for upload
-                with open(temp_path, 'rb') as f:
-                    video_bytes = f.read()
+                # Calculate number of frames based on duration (assuming 24 fps)
+                fps = 24
+                num_frames = int(duration * fps)
                 
-                return {
-                    "video_data": video_bytes,
-                    "temp_path": temp_path,
-                    "size_bytes": file_size,
-                    "format": "binary"
-                }
+                logger.info(f"Generating video with {model}: {prompt}")
+                logger.info(f"Resolution: {width}x{height}, Duration: {duration}s, Frames: {num_frames}")
                 
-            else:
-                raise ValueError(f"Unknown return_method: {return_method}")
+                # Generate video
+                with torch.autocast(self.device):
+                    result = self.pipeline(
+                        prompt=prompt,
+                        num_frames=num_frames,
+                        height=height,
+                        width=width,
+                        num_inference_steps=num_inference_steps,
+                        guidance_scale=guidance_scale,
+                        generator=torch.Generator(device=self.device).manual_seed(42)
+                    )
                 
-        except Exception as e:
-            logger.error(f"Error generating video: {str(e)}")
-            logger.error(traceback.format_exc())
-            raise e
+                # Save video to temporary file
+                with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_file:
+                    temp_path = temp_file.name
+                
+                # Convert frames to video
+                if hasattr(result, 'frames') and result.frames:
+                    frames = result.frames[0]
+                    self._save_frames_as_video(frames, temp_path, fps)
+                elif hasattr(result, 'videos') and result.videos is not None:
+                    video_tensor = result.videos[0]
+                    self._save_tensor_as_video(video_tensor, temp_path, fps)
+                else:
+                    raise Exception("Unexpected output format from pipeline")
+                
+                # Return based on method
+                if return_method == "base64":
+                    with open(temp_path, 'rb') as f:
+                        video_bytes = f.read()
+                    video_base64 = base64.b64encode(video_bytes).decode('utf-8')
+                    os.unlink(temp_path)
+                    
+                    return {
+                        "video": video_base64,
+                        "size_bytes": len(video_bytes),
+                        "format": "base64"
+                    }
+                    
+                elif return_method == "file_info":
+                    # Return file info for external upload
+                    file_size = os.path.getsize(temp_path)
+                    
+                    # Read file for upload
+                    with open(temp_path, 'rb') as f:
+                        video_bytes = f.read()
+                    
+                    return {
+                        "video_data": video_bytes,
+                        "temp_path": temp_path,
+                        "size_bytes": file_size,
+                        "format": "binary"
+                    }
+                    
+                else:
+                    raise ValueError(f"Unknown return_method: {return_method}")
+                    
+            except Exception as e:
+                logger.error(f"Error generating video: {str(e)}")
+                logger.error(traceback.format_exc())
+                raise e
     
     def _save_frames_as_video(self, frames, output_path: str, fps: int):
         """Save list of PIL images as video"""
