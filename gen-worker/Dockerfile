@@ -22,15 +22,12 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Copy gen-worker directory contents
+COPY gen-worker/ .
 
 # Install Python dependencies with specific versions for better compatibility
 RUN pip3 install --no-cache-dir torch==2.1.0 torchvision==0.16.0 --index-url https://download.pytorch.org/whl/cu121
 RUN pip3 install --no-cache-dir -r requirements.txt
-
-# Copy application code
-COPY . .
 
 # Create necessary directories with appropriate permissions
 RUN mkdir -p /app/outputs /app/cache /app/tmp \
