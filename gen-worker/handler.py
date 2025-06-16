@@ -81,52 +81,22 @@ class VideoGenerator:
                 if not model_config:
                     raise ValueError(f"Unknown model: {model_key}")
                 
-                logger.info(f"Loading {model_key} model from {model_config['name']}...")
-                logger.info(f"GPU Info - Device: {self.device}")
-                if self.device == "cuda":
-                    logger.info(f"CUDA Device: {torch.cuda.get_device_name()}")
-                    logger.info(f"Available VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f}GB")
-                    logger.info(f"Current VRAM Usage: {torch.cuda.memory_allocated() / 1e9:.2f}GB")
+                logger.info(f"Loading {model_key} model...")
                 
                 # Optimize memory usage during model loading
                 torch.cuda.empty_cache()
                 
-                try:
-                    logger.info("Attempting to download/load model...")
-                    self.pipeline = DiffusionPipeline.from_pretrained(
-                        model_config["name"],
-                        torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                        use_safetensors=True,
-                        variant="fp16" if self.device == "cuda" else None,
-                        resume_download=True,  # Resume interrupted downloads
-                        local_files_only=False  # Force check online
-                    )
-                    logger.info("Model downloaded and loaded successfully")
-                except Exception as e:
-                    logger.error(f"Model download/load failed: {str(e)}")
-                    logger.error(f"Full traceback: {traceback.format_exc()}")
-                    
-                    # Check model cache
-                    cache_dir = os.path.join("/app/cache", "models--" + model_config["name"].replace("/", "--"))
-                    logger.info(f"Checking cache directory: {cache_dir}")
-                    if os.path.exists(cache_dir):
-                        logger.info(f"Cache directory contents: {os.listdir(cache_dir)}")
-                    else:
-                        logger.error(f"Cache directory not found: {cache_dir}")
-                    raise
-            
-            if self.device == "cuda":
-                try:
-                    logger.info("Moving model to GPU...")
-                    self.pipeline = self.pipeline.to(self.device)
-                    logger.info("Model moved to GPU successfully")
-                except Exception as e:
-                    logger.error(f"Failed to move model to GPU: {str(e)}")
-                    raise
+                self.pipeline = DiffusionPipeline.from_pretrained(
+                    model_config["name"],
+                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                    use_safetensors=True,
+                    variant="fp16" if self.device == "cuda" else None
+                )
                 
-                try:
-                    # Apply optimizations
-                    logger.info("Applying model optimizations...")
+                if self.device == "cuda":
+                    self.pipeline = self.pipeline.to(self.device)
+                    
+                    # Apply memory and performance optimizations
                     if model_config["memory_optimization"]:
                         self.pipeline.enable_xformers_memory_efficient_attention()
                         self.pipeline.enable_model_cpu_offload()
@@ -136,18 +106,13 @@ class VideoGenerator:
                     
                     if model_config["channels_last"]:
                         self.pipeline.unet = self.pipeline.unet.to(memory_format=torch.channels_last)
-                    
-                    logger.info("Model optimizations applied successfully")
-                except Exception as e:
-                    logger.error(f"Failed to apply optimizations: {str(e)}")
-                    raise
-            
-            self.current_model = model_key
-            logger.info(f"Model {model_key} fully loaded and ready")
-            return True
-            
+                
+                self.current_model = model_key
+                logger.info(f"Model {model_key} loaded with optimizations")
+                return True
+                
         except Exception as e:
-            logger.error(f"Error loading model {model_key}: {str(e)}")
+            logger.error(f"Error loading model: {str(e)}")
             logger.error(traceback.format_exc())
             return False
     
