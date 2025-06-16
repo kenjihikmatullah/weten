@@ -1,12 +1,13 @@
-# Use NVIDIA CUDA base image with multi-platform support
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+# Use NVIDIA CUDA development base image instead of runtime
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     TORCH_CUDA_ARCH_LIST="6.0;6.1;7.0;7.5;8.0;8.6;8.9;9.0+PTX" \
     TORCH_NVCC_FLAGS="-Xfatbin -compress-all" \
-    CUDA_VISIBLE_DEVICES=0
+    CUDA_VISIBLE_DEVICES=0 \
+    CUDA_HOME=/usr/local/cuda
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -18,6 +19,7 @@ RUN apt-get update && apt-get install -y \
     git \
     ffmpeg \
     build-essential \
+    ninja-build \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -28,6 +30,12 @@ COPY gen-worker/ .
 
 # Install Python dependencies with specific versions for better compatibility
 RUN pip3 install --no-cache-dir torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cu121
+
+# Install flash-attn first with its dependencies
+RUN pip3 install --no-cache-dir packaging wheel setuptools
+RUN pip3 install --no-cache-dir flash-attn --no-build-isolation
+
+# Then install other requirements
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Clone Wan2.1 repository
