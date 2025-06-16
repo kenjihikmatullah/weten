@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     git \
     ffmpeg \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -26,12 +27,18 @@ WORKDIR /app
 COPY gen-worker/ .
 
 # Install Python dependencies with specific versions for better compatibility
-RUN pip3 install --no-cache-dir torch==2.1.0 torchvision==0.16.0 --index-url https://download.pytorch.org/whl/cu121
+RUN pip3 install --no-cache-dir torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cu121
 RUN pip3 install --no-cache-dir -r requirements.txt
 
+# Clone Wan2.1 repository
+RUN git clone https://github.com/Wan-Video/Wan2.1.git /app/Wan2.1
+
+# Install Wan2.1 requirements
+RUN pip3 install --no-cache-dir -r /app/Wan2.1/requirements.txt
+
 # Create necessary directories with appropriate permissions
-RUN mkdir -p /app/outputs /app/cache /app/tmp \
-    && chmod -R 777 /app/outputs /app/cache /app/tmp
+RUN mkdir -p /app/outputs /app/cache /app/tmp /app/models \
+    && chmod -R 777 /app/outputs /app/cache /app/tmp /app/models
 
 # Set environment variables for optimization
 ENV TRANSFORMERS_CACHE=/app/cache \
@@ -39,7 +46,8 @@ ENV TRANSFORMERS_CACHE=/app/cache \
     TORCH_HOME=/app/cache \
     TMPDIR=/app/tmp \
     OMP_NUM_THREADS=4 \
-    CUDA_LAUNCH_BLOCKING=0
+    CUDA_LAUNCH_BLOCKING=0 \
+    PYTHONPATH=/app/Wan2.1:$PYTHONPATH
 
 # Expose port (optional, RunPod handles this)
 EXPOSE 8000
