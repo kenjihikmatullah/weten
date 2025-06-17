@@ -8,7 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     SUPABASE_URL="" \
     SUPABASE_ANON_KEY=""
 
-# Install minimal system dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
@@ -31,7 +31,7 @@ RUN pip3 install --no-cache-dir \
     runpod \
     numpy \
     imageio \
-    supabase-py
+    supabase
 
 # Clone and setup Wan2.1
 RUN git clone https://github.com/Wan-Video/Wan2.1.git /app/Wan2.1 \
