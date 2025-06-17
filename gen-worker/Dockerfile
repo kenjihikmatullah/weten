@@ -33,7 +33,14 @@ RUN pip3 install --no-cache-dir \
     imageio \
     supabase \
     modelscope \
-    opencv-python-headless
+    opencv-python-headless \
+    addict \
+    future \
+    yapf \
+    einops \
+    timm \
+    safetensors \
+    sentencepiece
 
 # Clone and setup Wan2.1
 RUN git clone https://github.com/Wan-Video/Wan2.1.git /app/Wan2.1 \
