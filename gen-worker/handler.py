@@ -23,7 +23,10 @@ class WanVideoGenerator:
     def __init__(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.wan_repo_path = "/app/Wan2.1"
-        self.models_path = "/workspace/models"
+        
+        # Detect network volume path
+        self.models_path = self._detect_volume_path()
+        logger.info(f"Using models path: {self.models_path}")
         
         self.model_configs = {
             "wan-2.1-1.3b": {
@@ -49,6 +52,111 @@ class WanVideoGenerator:
         if self.wan_repo_path not in sys.path:
             sys.path.insert(0, self.wan_repo_path)
     
+    def _detect_volume_path(self) -> str:
+        """
+        Detect the network volume mount path in RunPod Serverless
+        """
+        # Common RunPod network volume mount paths
+        possible_paths = [
+            "/runpod-volume",           # Most common
+            "/workspace",               # Alternative
+            "/volume",                  # Alternative
+            "/mnt/runpod-volume",       # Alternative
+            os.environ.get("RUNPOD_VOLUME_PATH", ""),  # Environment variable
+        ]
+        
+        # Check environment variable first
+        if "RUNPOD_VOLUME_PATH" in os.environ:
+            env_path = os.environ["RUNPOD_VOLUME_PATH"]
+            if os.path.exists(env_path):
+                return f"{env_path}/models"
+        
+        # Check common paths
+        for path in possible_paths:
+            if path and os.path.exists(path):
+                models_path = f"{path}/models"
+                if os.path.exists(models_path):
+                    return models_path
+                # If models folder doesn't exist, try to create it
+                try:
+                    os.makedirs(models_path, exist_ok=True)
+                    return models_path
+                except:
+                    continue
+        
+        # Fallback: check root filesystem for any mounted volumes
+        volume_path = self._find_volume_by_content()
+        if volume_path:
+            return f"{volume_path}/models"
+        
+        # Last resort - create in container filesystem (not persistent)
+        logger.warning("Network volume not found, using container filesystem (not persistent!)")
+        return "/tmp/models"
+    
+    def _find_volume_by_content(self) -> str:
+        """
+        Find volume by looking for model directories
+        """
+        # Check common mount points
+        mount_points = ["/mnt", "/media", "/volumes"]
+        
+        for mount_point in mount_points:
+            if os.path.exists(mount_point):
+                for item in os.listdir(mount_point):
+                    item_path = os.path.join(mount_point, item)
+                    if os.path.isdir(item_path):
+                        # Check if this directory contains model folders
+                        models_path = os.path.join(item_path, "models")
+                        if os.path.exists(models_path):
+                            for model_folder in ["Wan2.1-T2V-1.3B", "Wan2.1-T2V-14B"]:
+                                if os.path.exists(os.path.join(models_path, model_folder)):
+                                    return item_path
+        
+        # Check if there are any directories that look like model directories
+        for root, dirs, files in os.walk("/"):
+            # Skip system directories
+            if any(sys_dir in root for sys_dir in ["/proc", "/sys", "/dev", "/boot", "/etc"]):
+                continue
+            
+            if "Wan2.1-T2V-1.3B" in dirs or "Wan2.1-T2V-14B" in dirs:
+                return os.path.dirname(root) if root.endswith("/models") else root
+        
+        return None
+    
+    def _list_volume_contents(self):
+        """
+        Debug function to list volume contents
+        """
+        logger.info("=== Volume Detection Debug ===")
+        
+        # Check environment variables
+        for key, value in os.environ.items():
+            if "volume" in key.lower() or "runpod" in key.lower():
+                logger.info(f"ENV: {key} = {value}")
+        
+        # Check common paths
+        paths_to_check = ["/", "/runpod-volume", "/workspace", "/volume", "/mnt"]
+        
+        for path in paths_to_check:
+            if os.path.exists(path):
+                try:
+                    contents = os.listdir(path)
+                    logger.info(f"Contents of {path}: {contents}")
+                    
+                    # Check subdirectories
+                    for item in contents[:10]:  # Limit to first 10 items
+                        item_path = os.path.join(path, item)
+                        if os.path.isdir(item_path) and not item.startswith('.'):
+                            try:
+                                sub_contents = os.listdir(item_path)
+                                logger.info(f"  {item}/: {sub_contents[:5]}...")  # First 5 items
+                            except:
+                                pass
+                except Exception as e:
+                    logger.info(f"Cannot read {path}: {e}")
+        
+        logger.info("=== End Debug ===")
+
     def upload_to_storage(self, file_path: str, generation_id: str) -> str:
         """Upload video to Supabase storage and return public URL"""
         try:
@@ -74,11 +182,45 @@ class WanVideoGenerator:
 
     def _verify_models(self):
         """Verify that models exist in the volume"""
+        logger.info(f"Verifying models in path: {self.models_path}")
+        
+        # If models path doesn't exist, try to create it
+        if not os.path.exists(self.models_path):
+            try:
+                os.makedirs(self.models_path, exist_ok=True)
+                logger.info(f"Created models directory: {self.models_path}")
+            except Exception as e:
+                logger.error(f"Cannot create models directory: {e}")
+                # List contents for debugging
+                self._list_volume_contents()
+                raise RuntimeError(f"Cannot access or create models directory: {self.models_path}")
+        
+        missing_models = []
+        existing_models = []
+        
         for model_key, config in self.model_configs.items():
             path = config["local_path"]
-            if not os.path.exists(path) or not os.listdir(path):
-                raise RuntimeError(f"Model {model_key} not found in volume at {path}")
-        logger.info("All models verified in volume")
+            if os.path.exists(path) and os.listdir(path):
+                existing_models.append(model_key)
+                logger.info(f"✓ Model {model_key} found at {path}")
+            else:
+                missing_models.append(model_key)
+                logger.warning(f"✗ Model {model_key} not found at {path}")
+        
+        if not existing_models:
+            logger.error("No models found in volume!")
+            # List what's actually in the models directory
+            if os.path.exists(self.models_path):
+                contents = os.listdir(self.models_path)
+                logger.info(f"Contents of {self.models_path}: {contents}")
+            
+            self._list_volume_contents()
+            raise RuntimeError("No models found in volume. Please ensure models are uploaded to the network volume.")
+        
+        # Update model configs to only include existing models
+        self.model_configs = {k: v for k, v in self.model_configs.items() if k in existing_models}
+        
+        logger.info(f"Available models: {list(self.model_configs.keys())}")
     
     def check_gpu_compatibility(self, model_key: str) -> bool:
         """Check if current GPU has enough memory for the specified model"""
@@ -92,14 +234,19 @@ class WanVideoGenerator:
     
     def select_optimal_model(self, preferred_model: str = None) -> str:
         """Select the optimal model based on GPU compatibility"""
-        if preferred_model and self.check_gpu_compatibility(preferred_model):
+        if preferred_model and preferred_model in self.model_configs and self.check_gpu_compatibility(preferred_model):
             return preferred_model
         
         for model_key in ["wan-2.1-14b", "wan-2.1-1.3b"]:
-            if self.check_gpu_compatibility(model_key):
+            if model_key in self.model_configs and self.check_gpu_compatibility(model_key):
                 return model_key
         
-        return "wan-2.1-1.3b"
+        # Return first available model
+        available_models = list(self.model_configs.keys())
+        if available_models:
+            return available_models[0]
+        
+        raise RuntimeError("No compatible models available")
     
     def generate_video(self, prompt: str, generation_id: str, duration: float = 3.0, 
                       resolution: str = None, model: str = None, 
@@ -107,6 +254,10 @@ class WanVideoGenerator:
         """Generate video from text prompt"""
         try:
             model = model or self.select_optimal_model()
+            
+            if model not in self.model_configs:
+                raise ValueError(f"Model {model} not available. Available models: {list(self.model_configs.keys())}")
+            
             model_config = self.model_configs[model]
             
             size_str = resolution or model_config["recommended_size"]
@@ -126,8 +277,14 @@ class WanVideoGenerator:
                 "--output_dir", output_dir
             ]
             
+            logger.info(f"Running command: {' '.join(cmd)}")
+            
             os.chdir(self.wan_repo_path)
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            
+            logger.info(f"Generation completed. Output: {result.stdout}")
+            if result.stderr:
+                logger.warning(f"stderr: {result.stderr}")
             
             video_file = next(
                 (os.path.join(output_dir, f) for f in os.listdir(output_dir) 
@@ -136,7 +293,8 @@ class WanVideoGenerator:
             )
             
             if not video_file:
-                raise Exception("Video generation failed")
+                logger.error(f"No video file found in {output_dir}. Contents: {os.listdir(output_dir)}")
+                raise Exception("Video generation failed - no output file found")
             
             # Upload to Supabase storage
             video_url = self.upload_to_storage(video_file, generation_id)
@@ -151,8 +309,14 @@ class WanVideoGenerator:
                 "generation_id": generation_id
             }
             
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Command failed: {e}")
+            logger.error(f"stdout: {e.stdout}")
+            logger.error(f"stderr: {e.stderr}")
+            raise Exception(f"Video generation failed: {e.stderr}")
         except Exception as e:
             logger.error(f"Error generating video: {str(e)}")
+            logger.error(traceback.format_exc())
             raise
 
 def handler(job):
@@ -163,7 +327,16 @@ def handler(job):
         if job_input.get("action") == "get_model_info":
             return {
                 "available_models": list(video_generator.model_configs.keys()),
-                "device": video_generator.device
+                "device": video_generator.device,
+                "models_path": video_generator.models_path
+            }
+        
+        # Debug action to check volume
+        if job_input.get("action") == "debug_volume":
+            video_generator._list_volume_contents()
+            return {
+                "models_path": video_generator.models_path,
+                "available_models": list(video_generator.model_configs.keys())
             }
         
         # Validate required inputs
@@ -186,10 +359,17 @@ def handler(job):
         return result
         
     except Exception as e:
+        logger.error(f"Handler error: {str(e)}")
+        logger.error(traceback.format_exc())
         return {"error": str(e)}
 
 # Initialize generator
-video_generator = WanVideoGenerator()
+try:
+    video_generator = WanVideoGenerator()
+    logger.info("Video generator initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize video generator: {e}")
+    raise
 
 if __name__ == "__main__":
     if not SUPABASE_URL or not SUPABASE_KEY:
