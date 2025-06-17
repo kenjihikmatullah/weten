@@ -19,33 +19,16 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy gen-worker files
+# Copy gen-worker files, including the new requirements.txt
 COPY gen-worker/ .
 
-# Install Python dependencies
-RUN pip3 install --no-cache-dir \
-    torch==2.4.0 \
-    torchvision==0.19.0 \
-    --index-url https://download.pytorch.org/whl/cu121 \
-    && pip3 install --no-cache-dir \
-    runpod \
-    numpy \
-    imageio \
-    supabase \
-    modelscope \
-    opencv-python-headless \
-    addict \
-    future \
-    yapf \
-    einops \
-    timm \
-    safetensors \
-    sentencepiece
-
-# Clone and setup Wan2.1
-RUN git clone https://github.com/Wan-Video/Wan2.1.git /app/Wan2.1 \
-    && cd /app/Wan2.1 \
+# Install Python dependencies from our own controlled file
+# This installs torch first, then everything else from our requirements.txt
+RUN pip3 install --no-cache-dir torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cu121 \
     && pip3 install --no-cache-dir -r requirements.txt
+
+# Clone Wan2.1 for its Python source code, but IGNORE its requirements.txt
+RUN git clone https://github.com/Wan-Video/Wan2.1.git /app/Wan2.1
 
 # Create outputs directory
 RUN mkdir -p /app/outputs && chmod -R 777 /app/outputs

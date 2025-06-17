@@ -1,4 +1,10 @@
+# Core Application & RunPod
 runpod>=1.6.0
+supabase>=2.0.0
+
+# Modelscope & Dependencies from your file
+modelscope
+datasets
 torch>=2.4.0
 torchvision
 numpy
@@ -6,6 +12,21 @@ pillow
 huggingface-hub
 transformers
 accelerate
-supabase>=2.0.0
 imageio
 imageio-ffmpeg
+
+# Dependencies from Wan2.1
+decord
+omegaconf
+av
+pytorch-lightning
+einops
+
+# Other common supporting packages
+opencv-python-headless
+timm
+safetensors
+sentencepiece
+addict
+future
+yapf
