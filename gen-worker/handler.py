@@ -249,8 +249,8 @@ class WanVideoGenerator:
         raise RuntimeError("No compatible models available")
     
     def generate_video(self, prompt: str, reference_id: str, duration: float = 3.0, 
-                      resolution: str = None, model: str = None, 
-                      guidance_scale: float = None) -> Dict[str, Any]:
+                resolution: str = None, model: str = None, 
+                guidance_scale: float = None) -> Dict[str, Any]:
         """Generate video from text prompt"""
         try:
             model = model or self.select_optimal_model()
@@ -259,45 +259,39 @@ class WanVideoGenerator:
                 raise ValueError(f"Model {model} not available. Available models: {list(self.model_configs.keys())}")
             
             model_config = self.model_configs[model]
-            
             size_str = resolution or model_config["recommended_size"]
             guidance_scale = guidance_scale or model_config["sample_guide_scale"]
             
+            # Import required modules from Wan2.1
+            sys.path.insert(0, self.wan_repo_path)
+            from modelscope.pipelines import pipeline
+            from modelscope.outputs import OutputKeys
+            
+            # Create video generation pipeline
+            pipe = pipeline('text-to-video-synthesis', 
+                        model=model_config["local_path"],
+                        device=self.device)
+            
+            # Generate video
+            width, height = map(int, size_str.split('x'))
+            output = pipe({
+                'text': prompt,
+                'size': (height, width),  # Height comes first in modelscope
+                'guidance_scale': guidance_scale,
+                'sample_shift': model_config["sample_shift"]
+            })
+            
+            # Save video to temporary location
             output_dir = f"/app/outputs/{uuid.uuid4().hex}"
             os.makedirs(output_dir, exist_ok=True)
+            video_path = os.path.join(output_dir, f"{reference_id}.mp4")
             
-            cmd = [
-                "python", f"{self.wan_repo_path}/generate.py",
-                "--task", model_config["task"],
-                "--size", size_str,
-                "--ckpt_dir", model_config["local_path"],
-                "--sample_shift", str(model_config["sample_shift"]),
-                "--sample_guide_scale", str(guidance_scale),
-                "--prompt", prompt,
-                "--output_dir", output_dir
-            ]
-            
-            logger.info(f"Running command: {' '.join(cmd)}")
-            
-            os.chdir(self.wan_repo_path)
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            
-            logger.info(f"Generation completed. Output: {result.stdout}")
-            if result.stderr:
-                logger.warning(f"stderr: {result.stderr}")
-            
-            video_file = next(
-                (os.path.join(output_dir, f) for f in os.listdir(output_dir) 
-                 if f.endswith(('.mp4', '.avi', '.mov'))), 
-                None
-            )
-            
-            if not video_file:
-                logger.error(f"No video file found in {output_dir}. Contents: {os.listdir(output_dir)}")
-                raise Exception("Video generation failed - no output file found")
+            # Get video data and save
+            video_data = output[OutputKeys.OUTPUT_VIDEO]
+            video_data.save(video_path)
             
             # Upload to Supabase storage
-            video_url = self.upload_to_storage(video_file, reference_id)
+            video_url = self.upload_to_storage(video_path, reference_id)
             
             # Clean up
             shutil.rmtree(output_dir, ignore_errors=True)
@@ -309,15 +303,11 @@ class WanVideoGenerator:
                 "reference_id": reference_id
             }
             
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Command failed: {e}")
-            logger.error(f"stdout: {e.stdout}")
-            logger.error(f"stderr: {e.stderr}")
-            raise Exception(f"Video generation failed: {e.stderr}")
         except Exception as e:
             logger.error(f"Error generating video: {str(e)}")
             logger.error(traceback.format_exc())
             raise
+
 
 def handler(job):
     """RunPod handler function"""

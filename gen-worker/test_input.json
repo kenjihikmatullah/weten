@@ -7,7 +7,6 @@
     "num_inference_steps": 30,
     "guidance_scale": 7.5,
     "output_method": "both",
-    "supabase_bucket": "videos",
-    "filename": "dragon_castle_sunset.mp4"
+    "supabase_bucket": "videos"
   }
 }

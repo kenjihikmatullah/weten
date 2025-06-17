@@ -31,7 +31,9 @@ RUN pip3 install --no-cache-dir \
     runpod \
     numpy \
     imageio \
-    supabase
+    supabase \
+    modelscope \
+    opencv-python-headless
 
 # Clone and setup Wan2.1
 RUN git clone https://github.com/Wan-Video/Wan2.1.git /app/Wan2.1 \
