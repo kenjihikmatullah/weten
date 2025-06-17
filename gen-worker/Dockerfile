@@ -4,58 +4,44 @@ FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
-    TORCH_CUDA_ARCH_LIST="6.0;6.1;7.0;7.5;8.0;8.6;8.9;9.0+PTX" \
-    TORCH_NVCC_FLAGS="-Xfatbin -compress-all" \
-    CUDA_VISIBLE_DEVICES=0 \
-    CUDA_HOME=/usr/local/cuda
+    CUDA_HOME=/usr/local/cuda \
+    SUPABASE_URL="" \
+    SUPABASE_ANON_KEY=""
 
-# Install system dependencies
+# Install minimal system dependencies
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
-    python3-dev \
-    wget \
-    curl \
     git \
     ffmpeg \
-    build-essential \
-    ninja-build \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Copy gen-worker directory contents
+# Copy gen-worker files
 COPY gen-worker/ .
 
-# Install Python dependencies with specific versions for better compatibility
-RUN pip3 install --no-cache-dir torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cu121
+# Install Python dependencies
+RUN pip3 install --no-cache-dir \
+    torch==2.4.0 \
+    torchvision==0.19.0 \
+    --index-url https://download.pytorch.org/whl/cu121 \
+    && pip3 install --no-cache-dir \
+    runpod \
+    numpy \
+    imageio \
+    supabase-py
 
-# Install flash-attn first with its dependencies
-RUN pip3 install --no-cache-dir packaging wheel setuptools
-RUN pip3 install --no-cache-dir flash-attn --no-build-isolation
+# Clone and setup Wan2.1
+RUN git clone https://github.com/Wan-Video/Wan2.1.git /app/Wan2.1 \
+    && cd /app/Wan2.1 \
+    && pip3 install --no-cache-dir -r requirements.txt
 
-# Then install other requirements
-RUN pip3 install --no-cache-dir -r requirements.txt
+# Create outputs directory
+RUN mkdir -p /app/outputs && chmod -R 777 /app/outputs
 
-# Clone Wan2.1 repository
-RUN git clone https://github.com/Wan-Video/Wan2.1.git /app/Wan2.1
-
-# Install Wan2.1 requirements
-RUN pip3 install --no-cache-dir -r /app/Wan2.1/requirements.txt
-
-# Create necessary directories with appropriate permissions
-RUN mkdir -p /app/outputs /app/cache /app/tmp /app/models \
-    && chmod -R 777 /app/outputs /app/cache /app/tmp /app/models
-
-# Set environment variables for optimization
-ENV TRANSFORMERS_CACHE=/app/cache \
-    HF_HOME=/app/cache \
-    TORCH_HOME=/app/cache \
-    TMPDIR=/app/tmp \
-    OMP_NUM_THREADS=4 \
-    CUDA_LAUNCH_BLOCKING=0 \
-    PYTHONPATH=/app/Wan2.1:$PYTHONPATH
+ENV PYTHONPATH=/app/Wan2.1:$PYTHONPATH
 
 # Expose port (optional, RunPod handles this)
 EXPOSE 8000
