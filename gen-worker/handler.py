@@ -157,14 +157,14 @@ class WanVideoGenerator:
         
         logger.info("=== End Debug ===")
 
-    def upload_to_storage(self, file_path: str, generation_id: str) -> str:
+    def upload_to_storage(self, file_path: str, reference_id: str) -> str:
         """Upload video to Supabase storage and return public URL"""
         try:
             with open(file_path, 'rb') as f:
                 file_bytes = f.read()
             
             # Upload to storage bucket 'videos'
-            file_path = f"public/{generation_id}.mp4"
+            file_path = f"public/{reference_id}.mp4"
             response = supabase.storage.from_('videos').upload(
                 file_path,
                 file_bytes,
@@ -248,7 +248,7 @@ class WanVideoGenerator:
         
         raise RuntimeError("No compatible models available")
     
-    def generate_video(self, prompt: str, generation_id: str, duration: float = 3.0, 
+    def generate_video(self, prompt: str, reference_id: str, duration: float = 3.0, 
                       resolution: str = None, model: str = None, 
                       guidance_scale: float = None) -> Dict[str, Any]:
         """Generate video from text prompt"""
@@ -297,7 +297,7 @@ class WanVideoGenerator:
                 raise Exception("Video generation failed - no output file found")
             
             # Upload to Supabase storage
-            video_url = self.upload_to_storage(video_file, generation_id)
+            video_url = self.upload_to_storage(video_file, reference_id)
             
             # Clean up
             shutil.rmtree(output_dir, ignore_errors=True)
@@ -306,7 +306,7 @@ class WanVideoGenerator:
                 "video_url": video_url,
                 "model_used": model,
                 "status": "success",
-                "generation_id": generation_id
+                "reference_id": reference_id
             }
             
         except subprocess.CalledProcessError as e:
@@ -341,15 +341,15 @@ def handler(job):
         
         # Validate required inputs
         prompt = job_input.get("prompt")
-        generation_id = job_input.get("generation_id")
+        reference_id = job_input.get("reference_id")
         
-        if not prompt or not generation_id:
-            return {"error": "Both prompt and generation_id are required"}
+        if not prompt or not reference_id:
+            return {"error": "Both prompt and reference_id are required"}
         
         # Generate video
         result = video_generator.generate_video(
             prompt=prompt,
-            generation_id=generation_id,
+            reference_id=reference_id,
             duration=job_input.get("duration", 3.0),
             resolution=job_input.get("resolution"),
             model=job_input.get("model"),
