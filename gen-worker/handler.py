@@ -1,15 +1,16 @@
 import runpod
 import torch
 import os
-import base64
 import logging
 import traceback
 from typing import Dict, Any
 import uuid
 import shutil
-import subprocess
 import sys
 from supabase import create_client, Client
+from diffusers.utils import export_to_video
+from diffusers import AutoencoderKLWan, WanPipeline
+from diffusers.schedulers.scheduling_unipc_multistep import UniPCMultistepScheduler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,36 +23,34 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 class WanVideoGenerator:
     def __init__(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.wan_repo_path = "/app/Wan2.1"
         
         # Detect network volume path
         self.models_path = self._detect_volume_path()
         logger.info(f"Using models path: {self.models_path}")
         
+        # Use official Diffusers model names
         self.model_configs = {
             "wan-2.1-1.3b": {
-                "local_path": f"{self.models_path}/Wan2.1-T2V-1.3B",
-                "task": "t2v-1.3B",
-                "recommended_size": "480x854",
-                "sample_shift": 8,
-                "sample_guide_scale": 6,
+                "model_id": "Wan-AI/Wan2.1-T2V-1.3B-Diffusers",
+                "local_path": f"{self.models_path}/Wan2.1-T2V-1.3B-Diffusers",
+                "recommended_size": {"width": 854, "height": 480},
+                "flow_shift": 3.0,
                 "min_gpu_memory_gb": 8
             },
             "wan-2.1-14b": {
-                "local_path": f"{self.models_path}/Wan2.1-T2V-14B",
-                "task": "t2v-14B",
-                "recommended_size": "720x1280",
-                "sample_shift": 8,
-                "sample_guide_scale": 7.5,
+                "model_id": "Wan-AI/Wan2.1-T2V-14B-Diffusers",
+                "local_path": f"{self.models_path}/Wan2.1-T2V-14B-Diffusers",
+                "recommended_size": {"width": 1280, "height": 720},
+                "flow_shift": 5.0,
                 "min_gpu_memory_gb": 24
             }
         }
         
         self._verify_models()
         
-        if self.wan_repo_path not in sys.path:
-            sys.path.insert(0, self.wan_repo_path)
-    
+        # Initialize pipelines
+        self.pipelines = {}
+        
     def _detect_volume_path(self) -> str:
         """
         Detect the network volume mount path in RunPod Serverless
@@ -108,18 +107,9 @@ class WanVideoGenerator:
                         # Check if this directory contains model folders
                         models_path = os.path.join(item_path, "models")
                         if os.path.exists(models_path):
-                            for model_folder in ["Wan2.1-T2V-1.3B", "Wan2.1-T2V-14B"]:
+                            for model_folder in ["Wan2.1-T2V-1.3B-Diffusers", "Wan2.1-T2V-14B-Diffusers"]:
                                 if os.path.exists(os.path.join(models_path, model_folder)):
                                     return item_path
-        
-        # Check if there are any directories that look like model directories
-        for root, dirs, files in os.walk("/"):
-            # Skip system directories
-            if any(sys_dir in root for sys_dir in ["/proc", "/sys", "/dev", "/boot", "/etc"]):
-                continue
-            
-            if "Wan2.1-T2V-1.3B" in dirs or "Wan2.1-T2V-14B" in dirs:
-                return os.path.dirname(root) if root.endswith("/models") else root
         
         return None
     
@@ -164,15 +154,15 @@ class WanVideoGenerator:
                 file_bytes = f.read()
             
             # Upload to storage bucket 'videos'
-            file_path = f"public/{reference_id}.mp4"
+            storage_path = f"public/{reference_id}.mp4"
             response = supabase.storage.from_('videos').upload(
-                file_path,
+                storage_path,
                 file_bytes,
                 {"content-type": "video/mp4"}
             )
             
             # Get public URL
-            public_url = supabase.storage.from_('videos').get_public_url(file_path)
+            public_url = supabase.storage.from_('videos').get_public_url(storage_path)
             logger.info(f"Video uploaded successfully: {public_url}")
             return public_url
             
@@ -248,10 +238,50 @@ class WanVideoGenerator:
         
         raise RuntimeError("No compatible models available")
     
+    def get_pipeline(self, model_key: str):
+        """Get or create pipeline for the specified model"""
+        if model_key not in self.pipelines:
+            logger.info(f"Loading pipeline for model: {model_key}")
+            
+            config = self.model_configs[model_key]
+            
+            # Use local path if available, otherwise use model_id for download
+            model_path = config["local_path"] if os.path.exists(config["local_path"]) else config["model_id"]
+            
+            # Load VAE
+            vae = AutoencoderKLWan.from_pretrained(
+                model_path, 
+                subfolder="vae", 
+                torch_dtype=torch.float32
+            )
+            
+            # Setup scheduler
+            scheduler = UniPCMultistepScheduler(
+                prediction_type='flow_prediction',
+                use_flow_sigmas=True,
+                num_train_timesteps=1000,
+                flow_shift=config["flow_shift"]
+            )
+            
+            # Load pipeline
+            pipe = WanPipeline.from_pretrained(
+                model_path,
+                vae=vae,
+                torch_dtype=torch.bfloat16
+            )
+            pipe.scheduler = scheduler
+            pipe.to(self.device)
+            
+            self.pipelines[model_key] = pipe
+            logger.info(f"Pipeline loaded successfully for {model_key}")
+        
+        return self.pipelines[model_key]
+    
     def generate_video(self, prompt: str, reference_id: str, duration: float = 3.0, 
-                resolution: str = None, model: str = None, 
-                guidance_scale: float = None) -> Dict[str, Any]:
-        """Generate video from text prompt"""
+                      resolution: str = None, model: str = None, 
+                      guidance_scale: float = 5.0, num_frames: int = 81,
+                      negative_prompt: str = None) -> Dict[str, Any]:
+        """Generate video from text prompt using official Wan2.1 method"""
         try:
             model = model or self.select_optimal_model()
             
@@ -259,36 +289,39 @@ class WanVideoGenerator:
                 raise ValueError(f"Model {model} not available. Available models: {list(self.model_configs.keys())}")
             
             model_config = self.model_configs[model]
-            size_str = resolution or model_config["recommended_size"]
-            guidance_scale = guidance_scale or model_config["sample_guide_scale"]
             
-            # Import required modules from Wan2.1
-            sys.path.insert(0, self.wan_repo_path)
-            from modelscope.pipelines import pipeline
-            from modelscope.outputs import OutputKeys
+            # Set resolution
+            if resolution:
+                width, height = map(int, resolution.split('x'))
+            else:
+                width = model_config["recommended_size"]["width"]
+                height = model_config["recommended_size"]["height"]
             
-            # Create video generation pipeline
-            pipe = pipeline('text-to-video-synthesis', 
-                        model=model_config["local_path"],
-                        device=self.device)
+            # Default negative prompt if not provided
+            if negative_prompt is None:
+                negative_prompt = "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
+            
+            # Get pipeline
+            pipe = self.get_pipeline(model)
             
             # Generate video
-            width, height = map(int, size_str.split('x'))
-            output = pipe({
-                'text': prompt,
-                'size': (height, width),  # Height comes first in modelscope
-                'guidance_scale': guidance_scale,
-                'sample_shift': model_config["sample_shift"]
-            })
+            logger.info(f"Generating video with prompt: {prompt[:50]}...")
+            output = pipe(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                height=height,
+                width=width,
+                num_frames=num_frames,
+                guidance_scale=guidance_scale,
+            ).frames[0]
             
             # Save video to temporary location
             output_dir = f"/app/outputs/{uuid.uuid4().hex}"
             os.makedirs(output_dir, exist_ok=True)
             video_path = os.path.join(output_dir, f"{reference_id}.mp4")
             
-            # Get video data and save
-            video_data = output[OutputKeys.OUTPUT_VIDEO]
-            video_data.save(video_path)
+            # Export video
+            export_to_video(output, video_path, fps=16)
             
             # Upload to Supabase storage
             video_url = self.upload_to_storage(video_path, reference_id)
@@ -300,7 +333,9 @@ class WanVideoGenerator:
                 "video_url": video_url,
                 "model_used": model,
                 "status": "success",
-                "reference_id": reference_id
+                "reference_id": reference_id,
+                "resolution": f"{width}x{height}",
+                "num_frames": num_frames
             }
             
         except Exception as e:
@@ -343,7 +378,9 @@ def handler(job):
             duration=job_input.get("duration", 3.0),
             resolution=job_input.get("resolution"),
             model=job_input.get("model"),
-            guidance_scale=job_input.get("guidance_scale")
+            guidance_scale=job_input.get("guidance_scale", 5.0),
+            num_frames=job_input.get("num_frames", 81),
+            negative_prompt=job_input.get("negative_prompt")
         )
         
         return result
