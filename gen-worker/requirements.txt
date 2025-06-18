@@ -4,7 +4,7 @@ supabase>=2.0.0
 
 # Modelscope & Dependencies from your file
 modelscope==1.9.5
-datasets==2.14.6
+datasets==2.13.0
 torch>=2.4.0
 torchvision
 numpy
