@@ -3,8 +3,8 @@ runpod>=1.6.0
 supabase>=2.0.0
 
 # Modelscope & Dependencies from your file
-modelscope
-datasets
+modelscope==1.9.5
+datasets==2.14.6
 torch>=2.4.0
 torchvision
 numpy

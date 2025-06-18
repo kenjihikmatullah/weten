@@ -351,7 +351,7 @@ def handler(job):
     except Exception as e:
         logger.error(f"Handler error: {str(e)}")
         logger.error(traceback.format_exc())
-        return {"error": str(e)}
+        return {"error": traceback.format_exc()}
 
 # Initialize generator
 try:
