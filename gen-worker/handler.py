@@ -54,43 +54,54 @@ class WanVideoGenerator:
     def _detect_volume_path(self) -> str:
         """
         Detect the network volume mount path in RunPod Serverless
+        Fixed to prioritize the known RunPod volume path
         """
-        # Common RunPod network volume mount paths
+        # Primary path - your actual RunPod volume location
+        primary_path = "/runpod-volume/models"
+        if os.path.exists(primary_path):
+            logger.info(f"Found primary RunPod volume at: {primary_path}")
+            return primary_path
+        
+        # Check if base volume exists but models folder doesn't
+        if os.path.exists("/runpod-volume"):
+            try:
+                os.makedirs(primary_path, exist_ok=True)
+                logger.info(f"Created models directory at: {primary_path}")
+                return primary_path
+            except Exception as e:
+                logger.warning(f"Could not create models directory: {e}")
+        
+        # Fallback paths if primary doesn't exist
         possible_paths = [
-            "/runpod-volume",           # Most common
-            "/workspace",               # Alternative
-            "/volume",                  # Alternative
-            "/mnt/runpod-volume",       # Alternative
-            os.environ.get("RUNPOD_VOLUME_PATH", ""),  # Environment variable
+            "/workspace/models",           # Alternative
+            "/volume/models",              # Alternative
+            "/mnt/runpod-volume/models",   # Alternative
+            os.environ.get("RUNPOD_VOLUME_PATH", "") + "/models" if os.environ.get("RUNPOD_VOLUME_PATH") else "",
         ]
         
         # Check environment variable first
         if "RUNPOD_VOLUME_PATH" in os.environ:
-            env_path = os.environ["RUNPOD_VOLUME_PATH"]
+            env_path = os.environ["RUNPOD_VOLUME_PATH"] + "/models"
             if os.path.exists(env_path):
-                return f"{env_path}/models"
+                logger.info(f"Found volume via environment variable: {env_path}")
+                return env_path
         
-        # Check common paths
+        # Check fallback paths
         for path in possible_paths:
             if path and os.path.exists(path):
-                models_path = f"{path}/models"
-                if os.path.exists(models_path):
-                    return models_path
-                # If models folder doesn't exist, try to create it
-                try:
-                    os.makedirs(models_path, exist_ok=True)
-                    return models_path
-                except:
-                    continue
+                logger.info(f"Found fallback volume at: {path}")
+                return path
         
-        # Fallback: check root filesystem for any mounted volumes
+        # Try to find volume by content
         volume_path = self._find_volume_by_content()
         if volume_path:
             return f"{volume_path}/models"
         
         # Last resort - create in container filesystem (not persistent)
         logger.warning("Network volume not found, using container filesystem (not persistent!)")
-        return "/tmp/models"
+        fallback_path = "/tmp/models"
+        os.makedirs(fallback_path, exist_ok=True)
+        return fallback_path
     
     def _find_volume_by_content(self) -> str:
         """
@@ -101,15 +112,19 @@ class WanVideoGenerator:
         
         for mount_point in mount_points:
             if os.path.exists(mount_point):
-                for item in os.listdir(mount_point):
-                    item_path = os.path.join(mount_point, item)
-                    if os.path.isdir(item_path):
-                        # Check if this directory contains model folders
-                        models_path = os.path.join(item_path, "models")
-                        if os.path.exists(models_path):
-                            for model_folder in ["Wan2.1-T2V-1.3B-Diffusers", "Wan2.1-T2V-14B-Diffusers"]:
-                                if os.path.exists(os.path.join(models_path, model_folder)):
-                                    return item_path
+                try:
+                    for item in os.listdir(mount_point):
+                        item_path = os.path.join(mount_point, item)
+                        if os.path.isdir(item_path):
+                            # Check if this directory contains model folders
+                            models_path = os.path.join(item_path, "models")
+                            if os.path.exists(models_path):
+                                for model_folder in ["Wan2.1-T2V-1.3B-Diffusers", "Wan2.1-T2V-14B-Diffusers"]:
+                                    if os.path.exists(os.path.join(models_path, model_folder)):
+                                        logger.info(f"Found models in: {item_path}")
+                                        return item_path
+                except Exception as e:
+                    logger.debug(f"Error scanning {mount_point}: {e}")
         
         return None
     
@@ -124,8 +139,20 @@ class WanVideoGenerator:
             if "volume" in key.lower() or "runpod" in key.lower():
                 logger.info(f"ENV: {key} = {value}")
         
+        # Check the specific RunPod volume path
+        runpod_paths = ["/runpod-volume", "/runpod-volume/models"]
+        for path in runpod_paths:
+            if os.path.exists(path):
+                try:
+                    contents = os.listdir(path)
+                    logger.info(f"Contents of {path}: {contents}")
+                except Exception as e:
+                    logger.info(f"Cannot read {path}: {e}")
+            else:
+                logger.info(f"Path does not exist: {path}")
+        
         # Check common paths
-        paths_to_check = ["/", "/runpod-volume", "/workspace", "/volume", "/mnt"]
+        paths_to_check = ["/", "/workspace", "/volume", "/mnt"]
         
         for path in paths_to_check:
             if os.path.exists(path):
@@ -190,9 +217,19 @@ class WanVideoGenerator:
         
         for model_key, config in self.model_configs.items():
             path = config["local_path"]
-            if os.path.exists(path) and os.listdir(path):
-                existing_models.append(model_key)
-                logger.info(f"✓ Model {model_key} found at {path}")
+            if os.path.exists(path):
+                # Check if the directory has content (not empty)
+                try:
+                    contents = os.listdir(path)
+                    if contents:  # Directory exists and is not empty
+                        existing_models.append(model_key)
+                        logger.info(f"✓ Model {model_key} found at {path} with {len(contents)} files")
+                    else:
+                        missing_models.append(model_key)
+                        logger.warning(f"✗ Model {model_key} directory exists but is empty: {path}")
+                except Exception as e:
+                    missing_models.append(model_key)
+                    logger.warning(f"✗ Model {model_key} directory exists but cannot be read: {path}, error: {e}")
             else:
                 missing_models.append(model_key)
                 logger.warning(f"✗ Model {model_key} not found at {path}")
@@ -201,16 +238,23 @@ class WanVideoGenerator:
             logger.error("No models found in volume!")
             # List what's actually in the models directory
             if os.path.exists(self.models_path):
-                contents = os.listdir(self.models_path)
-                logger.info(f"Contents of {self.models_path}: {contents}")
+                try:
+                    contents = os.listdir(self.models_path)
+                    logger.info(f"Contents of {self.models_path}: {contents}")
+                except Exception as e:
+                    logger.error(f"Cannot list contents of {self.models_path}: {e}")
             
             self._list_volume_contents()
-            raise RuntimeError("No models found in volume. Please ensure models are uploaded to the network volume.")
+            raise RuntimeError(f"No models found in volume at {self.models_path}. Please ensure models are uploaded to the network volume.")
         
-        # Update model configs to only include existing models
+        if missing_models:
+            logger.warning(f"Missing models: {missing_models}")
+            logger.info("These models will be downloaded at runtime if requested")
+        
+        # Update model configs to prioritize existing models
         self.model_configs = {k: v for k, v in self.model_configs.items() if k in existing_models}
         
-        logger.info(f"Available models: {list(self.model_configs.keys())}")
+        logger.info(f"Available pre-downloaded models: {list(self.model_configs.keys())}")
     
     def check_gpu_compatibility(self, model_key: str) -> bool:
         """Check if current GPU has enough memory for the specified model"""
@@ -220,21 +264,28 @@ class WanVideoGenerator:
         gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
         required_memory_gb = self.model_configs[model_key]["min_gpu_memory_gb"]
         
-        return gpu_memory_gb >= required_memory_gb
+        compatible = gpu_memory_gb >= required_memory_gb
+        logger.info(f"GPU Memory: {gpu_memory_gb:.1f}GB, Required: {required_memory_gb}GB, Compatible: {compatible}")
+        return compatible
     
     def select_optimal_model(self, preferred_model: str = None) -> str:
         """Select the optimal model based on GPU compatibility"""
         if preferred_model and preferred_model in self.model_configs and self.check_gpu_compatibility(preferred_model):
+            logger.info(f"Using preferred model: {preferred_model}")
             return preferred_model
         
+        # Try models in order of preference (14B first if compatible)
         for model_key in ["wan-2.1-14b", "wan-2.1-1.3b"]:
             if model_key in self.model_configs and self.check_gpu_compatibility(model_key):
+                logger.info(f"Auto-selected optimal model: {model_key}")
                 return model_key
         
-        # Return first available model
+        # Return first available model even if not ideal
         available_models = list(self.model_configs.keys())
         if available_models:
-            return available_models[0]
+            selected = available_models[0]
+            logger.warning(f"Using first available model despite compatibility issues: {selected}")
+            return selected
         
         raise RuntimeError("No compatible models available")
     
@@ -245,35 +296,49 @@ class WanVideoGenerator:
             
             config = self.model_configs[model_key]
             
-            # Use local path if available, otherwise use model_id for download
+            # PRIORITIZE LOCAL PATH - Use local path if available, otherwise use model_id for download
             model_path = config["local_path"] if os.path.exists(config["local_path"]) else config["model_id"]
             
-            # Load VAE
-            vae = AutoencoderKLWan.from_pretrained(
-                model_path, 
-                subfolder="vae", 
-                torch_dtype=torch.float32
-            )
+            if model_path == config["local_path"]:
+                logger.info(f"✓ Using pre-downloaded model from: {model_path}")
+            else:
+                logger.warning(f"⚠ Model not found locally, will download from HuggingFace: {config['model_id']}")
             
-            # Setup scheduler
-            scheduler = UniPCMultistepScheduler(
-                prediction_type='flow_prediction',
-                use_flow_sigmas=True,
-                num_train_timesteps=1000,
-                flow_shift=config["flow_shift"]
-            )
-            
-            # Load pipeline
-            pipe = WanPipeline.from_pretrained(
-                model_path,
-                vae=vae,
-                torch_dtype=torch.bfloat16
-            )
-            pipe.scheduler = scheduler
-            pipe.to(self.device)
-            
-            self.pipelines[model_key] = pipe
-            logger.info(f"Pipeline loaded successfully for {model_key}")
+            try:
+                # Load VAE
+                logger.info("Loading VAE...")
+                vae = AutoencoderKLWan.from_pretrained(
+                    model_path, 
+                    subfolder="vae", 
+                    torch_dtype=torch.float32
+                )
+                
+                # Setup scheduler
+                logger.info("Setting up scheduler...")
+                scheduler = UniPCMultistepScheduler(
+                    prediction_type='flow_prediction',
+                    use_flow_sigmas=True,
+                    num_train_timesteps=1000,
+                    flow_shift=config["flow_shift"]
+                )
+                
+                # Load pipeline
+                logger.info("Loading main pipeline...")
+                pipe = WanPipeline.from_pretrained(
+                    model_path,
+                    vae=vae,
+                    torch_dtype=torch.bfloat16
+                )
+                pipe.scheduler = scheduler
+                pipe.to(self.device)
+                
+                self.pipelines[model_key] = pipe
+                logger.info(f"✓ Pipeline loaded successfully for {model_key}")
+                
+            except Exception as e:
+                logger.error(f"Failed to load pipeline for {model_key}: {str(e)}")
+                logger.error(traceback.format_exc())
+                raise
         
         return self.pipelines[model_key]
     
@@ -305,7 +370,9 @@ class WanVideoGenerator:
             pipe = self.get_pipeline(model)
             
             # Generate video
-            logger.info(f"Generating video with prompt: {prompt[:50]}...")
+            logger.info(f"Generating video with model {model}, resolution {width}x{height}, frames {num_frames}")
+            logger.info(f"Prompt: {prompt[:100]}...")
+            
             output = pipe(
                 prompt=prompt,
                 negative_prompt=negative_prompt,
@@ -316,14 +383,16 @@ class WanVideoGenerator:
             ).frames[0]
             
             # Save video to temporary location
-            output_dir = f"/app/outputs/{uuid.uuid4().hex}"
+            output_dir = f"/tmp/outputs/{uuid.uuid4().hex}"
             os.makedirs(output_dir, exist_ok=True)
             video_path = os.path.join(output_dir, f"{reference_id}.mp4")
             
             # Export video
+            logger.info(f"Exporting video to: {video_path}")
             export_to_video(output, video_path, fps=16)
             
             # Upload to Supabase storage
+            logger.info("Uploading video to storage...")
             video_url = self.upload_to_storage(video_path, reference_id)
             
             # Clean up
@@ -335,7 +404,8 @@ class WanVideoGenerator:
                 "status": "success",
                 "reference_id": reference_id,
                 "resolution": f"{width}x{height}",
-                "num_frames": num_frames
+                "num_frames": num_frames,
+                "used_local_model": os.path.exists(model_config["local_path"])  # Added this field
             }
             
         except Exception as e:
@@ -353,7 +423,15 @@ def handler(job):
             return {
                 "available_models": list(video_generator.model_configs.keys()),
                 "device": video_generator.device,
-                "models_path": video_generator.models_path
+                "models_path": video_generator.models_path,
+                "model_details": {
+                    k: {
+                        "local_available": os.path.exists(v["local_path"]),
+                        "local_path": v["local_path"],
+                        "recommended_size": v["recommended_size"],
+                        "min_gpu_memory_gb": v["min_gpu_memory_gb"]
+                    } for k, v in video_generator.model_configs.items()
+                }
             }
         
         # Debug action to check volume
@@ -361,7 +439,11 @@ def handler(job):
             video_generator._list_volume_contents()
             return {
                 "models_path": video_generator.models_path,
-                "available_models": list(video_generator.model_configs.keys())
+                "available_models": list(video_generator.model_configs.keys()),
+                "model_paths_exist": {
+                    model: os.path.exists(config["local_path"]) 
+                    for model, config in video_generator.model_configs.items()
+                }
             }
         
         # Validate required inputs
@@ -388,7 +470,7 @@ def handler(job):
     except Exception as e:
         logger.error(f"Handler error: {str(e)}")
         logger.error(traceback.format_exc())
-        return {"error": traceback.format_exc()}
+        return {"error": str(e), "traceback": traceback.format_exc()}
 
 # Initialize generator
 try:
