@@ -7,28 +7,28 @@ modelscope==1.9.5
 datasets==2.13.0
 torch>=2.4.0
 torchvision
-numpy==1.24.4
-pillow==10.0.1
+numpy
+pillow
 huggingface-hub==0.33.0
-transformers==4.36.2
-accelerate==0.25.0
-imageio==2.31.6
-imageio-ffmpeg==0.4.9
+transformers
+accelerate
+imageio
+imageio-ffmpeg
 
 # Dependencies from Wan2.1
 decord
-omegaconf==2.3.0
+omegaconf
 av
 pytorch-lightning
-einops==0.7.0
+einops
 
 
 
 # Other common supporting packages
-opencv-python-headless==4.8.1.78
+opencv-python-headless
 timm
-safetensors==0.4.1
-sentencepiece==0.1.99
-addictt==2.4.0
-future==0.18.3
+safetensors
+sentencepiece
+addictt
+future
 yapf
