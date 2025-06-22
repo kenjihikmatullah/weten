@@ -15,6 +15,8 @@ from diffusers.schedulers.scheduling_unipc_multistep import UniPCMultistepSchedu
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+DEFAULT_MODELS_PATH = '/runpod-volume/models'
+
 # Initialize Supabase client
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY")
@@ -25,7 +27,7 @@ class WanVideoGenerator:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
         # Detect network volume path
-        self.models_path = self._detect_volume_path()
+        self.models_path = DEFAULT_MODELS_PATH
         logger.info(f"Using models path: {self.models_path}")
         
         # Use official Diffusers model names
@@ -50,83 +52,7 @@ class WanVideoGenerator:
         
         # Initialize pipelines
         self.pipelines = {}
-        
-    def _detect_volume_path(self) -> str:
-        """
-        Detect the network volume mount path in RunPod Serverless
-        Fixed to prioritize the known RunPod volume path
-        """
-        # Primary path - your actual RunPod volume location
-        primary_path = "/runpod-volume/models"
-        if os.path.exists(primary_path):
-            logger.info(f"Found primary RunPod volume at: {primary_path}")
-            return primary_path
-        
-        # Check if base volume exists but models folder doesn't
-        if os.path.exists("/runpod-volume"):
-            try:
-                os.makedirs(primary_path, exist_ok=True)
-                logger.info(f"Created models directory at: {primary_path}")
-                return primary_path
-            except Exception as e:
-                logger.warning(f"Could not create models directory: {e}")
-        
-        # Fallback paths if primary doesn't exist
-        possible_paths = [
-            "/workspace/models",           # Alternative
-            "/volume/models",              # Alternative
-            "/mnt/runpod-volume/models",   # Alternative
-            os.environ.get("RUNPOD_VOLUME_PATH", "") + "/models" if os.environ.get("RUNPOD_VOLUME_PATH") else "",
-        ]
-        
-        # Check environment variable first
-        if "RUNPOD_VOLUME_PATH" in os.environ:
-            env_path = os.environ["RUNPOD_VOLUME_PATH"] + "/models"
-            if os.path.exists(env_path):
-                logger.info(f"Found volume via environment variable: {env_path}")
-                return env_path
-        
-        # Check fallback paths
-        for path in possible_paths:
-            if path and os.path.exists(path):
-                logger.info(f"Found fallback volume at: {path}")
-                return path
-        
-        # Try to find volume by content
-        volume_path = self._find_volume_by_content()
-        if volume_path:
-            return f"{volume_path}/models"
-        
-        # Last resort - create in container filesystem (not persistent)
-        logger.warning("Network volume not found, using container filesystem (not persistent!)")
-        fallback_path = "/tmp/models"
-        os.makedirs(fallback_path, exist_ok=True)
-        return fallback_path
     
-    def _find_volume_by_content(self) -> str:
-        """
-        Find volume by looking for model directories
-        """
-        # Check common mount points
-        mount_points = ["/mnt", "/media", "/volumes"]
-        
-        for mount_point in mount_points:
-            if os.path.exists(mount_point):
-                try:
-                    for item in os.listdir(mount_point):
-                        item_path = os.path.join(mount_point, item)
-                        if os.path.isdir(item_path):
-                            # Check if this directory contains model folders
-                            models_path = os.path.join(item_path, "models")
-                            if os.path.exists(models_path):
-                                for model_folder in ["Wan2.1-T2V-1.3B-Diffusers", "Wan2.1-T2V-14B-Diffusers"]:
-                                    if os.path.exists(os.path.join(models_path, model_folder)):
-                                        logger.info(f"Found models in: {item_path}")
-                                        return item_path
-                except Exception as e:
-                    logger.debug(f"Error scanning {mount_point}: {e}")
-        
-        return None
     
     def _list_volume_contents(self):
         """
