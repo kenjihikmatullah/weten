@@ -3,6 +3,7 @@ runpod==1.7.0
 supabase==2.7.4
 
 # Modelscope & Dependencies from your file
+diffusers==0.30.3
 modelscope==1.9.5
 datasets==2.13.0
 torch>=2.4.0
