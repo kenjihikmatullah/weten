@@ -1,8 +1,11 @@
-# Core Application & RunPodAdd commentMore actions
+# Core Application & RunPod
 runpod==1.7.0
 supabase==2.7.4
 
-# Modelscope & Dependencies from your file
+# Custom diffusers from Wan2.1 (MUST be installed before other diffusers-dependent packages)
+git+https://github.com/Wan-Video/diffusers.git
+
+# Modelscope & Dependencies
 modelscope==1.9.5
 datasets==2.13.0
 torch>=2.4.0
@@ -21,8 +24,6 @@ omegaconf
 av
 pytorch-lightning
 einops
-
-
 
 # Other common supporting packages
 opencv-python-headless

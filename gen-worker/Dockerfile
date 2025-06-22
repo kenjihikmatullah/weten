@@ -22,19 +22,12 @@ WORKDIR /app
 # Copy gen-worker files, including the new requirements.txt
 COPY gen-worker/ .
 
-# Install PyTorch first with CUDA support
-RUN pip3 install --no-cache-dir torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cu121
+# Install Python dependencies from our own controlled file
+# This installs torch first, then everything else from our requirements.txt
+RUN pip3 install --no-cache-dir torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cu121 \
+    && pip3 install --no-cache-dir -r requirements.txt
 
-# Clone and install Wan2.1 custom diffusers BEFORE installing other requirements
-RUN git clone https://github.com/Wan-Video/diffusers.git /tmp/wan-diffusers \
-    && cd /tmp/wan-diffusers \
-    && pip3 install --no-cache-dir -e . \
-    && rm -rf /tmp/wan-diffusers
-
-# Install remaining Python dependencies (excluding diffusers since we installed custom version)
-RUN pip3 install --no-cache-dir -r requirements.txt
-
-# Clone Wan2.1 for reference/additional code if needed
+# Clone Wan2.1 for its Python source code, but IGNORE its requirements.txt
 RUN git clone https://github.com/Wan-Video/Wan2.1.git /app/Wan2.1
 
 # Create outputs directory
