@@ -9,7 +9,7 @@ diffusers==0.30.3
 # Core ML/AI packages - compatible with torch 2.4.0
 numpy==1.24.4
 pillow==10.0.1
-huggingface-hub==0.19.4
+huggingface-hub==0.33.0
 transformers==4.36.2
 accelerate==0.25.0
 safetensors==0.4.1
