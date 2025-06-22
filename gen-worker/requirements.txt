@@ -29,6 +29,6 @@ opencv-python-headless
 timm
 safetensors
 sentencepiece
-addictt
+addict
 future
 yapf
